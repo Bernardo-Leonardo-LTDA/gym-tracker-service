@@ -1,4 +1,34 @@
 # Gym Tracker Service
 
-## Tech Stack
-* Nest (Fremework)
+## 🛠️ Tech Stack
+
+- **Backend Framework**: [NestJS](https://nestjs.com/) (TypeScript)
+
+---
+
+## 📐 Architecture Overview
+
+This project follows a **Feature-Driven Modular Architecture**. Each module encapsulates its own domain logic (controller, service, entity, and DTOs).
+
+```text
+src/
+├── app.module.ts                  # Root module that orchestrates all other modules
+├── main.ts                        # Application bootstrapping
+│
+├── core/                          # Global and mandatory resources (Singletons)
+│   ├── config/                    # Environment variables configuration
+│   ├── database/                  # Database connection and initialization
+│
+├── shared/                        # Reusable modules or utilities shared across multiple domains
+│   ├── services/                  # General utility services
+│   └── utils/                     # Pure functions and helpers
+│
+└── modules/                       # The core of the application (Contexts / Domains)
+    └── feature/                   #
+        ├── dto/                   # Data Transfer Objects
+        ├── entities/              # Data model/database representation (if applicable)
+        ├── interfaces/            # Local types and contracts
+        ├── users.controller.ts    # Routes for the user domain
+        ├── users.module.ts        # Domain encapsulation
+        └── users.service.ts       # User business logic
+```
