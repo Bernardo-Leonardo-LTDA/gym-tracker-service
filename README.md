@@ -6,6 +6,16 @@
 
 ---
 
+## 📐ENV
+
+- You should create an .env file to add these env vars:
+
+```shell
+GOOGLE_MAPS_API_KEY=YOUR-KEY-HERE
+```
+
+---
+
 ## 📐 Architecture Overview
 
 This project follows a **Feature-Driven Modular Architecture**. Each module encapsulates its own domain logic (controller, service, entity, and DTOs).
