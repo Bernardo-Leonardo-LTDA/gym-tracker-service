@@ -8,7 +8,7 @@ export class GymsService {
 
   async searchGymsNearby(
     address: string,
-    radius = 1500,
+    radius = 1500
   ): Promise<Partial<PlaceData>[]> {
     const { lat, lng } = await this.mapsService.geocodeAddress(address);
     if (!lat || !lng) {
