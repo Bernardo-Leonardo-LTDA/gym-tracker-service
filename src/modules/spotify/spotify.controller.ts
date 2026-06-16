@@ -32,7 +32,11 @@ export class SpotifyController {
       return payload.returnTo && payload.returnTo.startsWith('/')
         ? payload.returnTo
         : '/';
-    } catch {
+    } catch (error) {
+      console.error(
+        'Error decoding Spotify return state:',
+        error instanceof Error ? error.message : error
+      );
       return '/';
     }
   }

@@ -41,7 +41,7 @@ export class PlaybackManagerService implements OnModuleInit {
               void this.syncWebPlayback(userId, state.accessToken);
             }
           } catch {
-            console.error(`Erro no fallback check do usuário ${userId}`);
+            console.error(`Error in fallback check for user ${userId}`);
           }
         }
       })();
@@ -104,7 +104,7 @@ export class PlaybackManagerService implements OnModuleInit {
       return state;
     } catch (error) {
       console.log(
-        'Erro ao sincronizar com Spotify:',
+        'Error syncing with Spotify:',
         error instanceof Error ? error.message : error
       );
 
