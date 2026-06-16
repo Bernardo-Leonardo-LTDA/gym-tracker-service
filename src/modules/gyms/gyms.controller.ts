@@ -9,7 +9,7 @@ export class GymsController {
   @Get('search')
   async searchGymsNearby(
     @Query('address') address: string,
-    @Query('radius') radius?: number,
+    @Query('radius') radius?: number
   ): Promise<Partial<PlaceData>[]> {
     const response = await this.gymsService.searchGymsNearby(address, radius);
     return response;
