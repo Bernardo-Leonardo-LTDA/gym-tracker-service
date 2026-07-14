@@ -13,7 +13,7 @@ interface SpotifyTrackItem {
   album: SpotifyAlbum;
 }
 
-export interface SpotifyPlaybackState {
+export interface SpotifyCurrentlyPlaying {
   is_playing: boolean;
   progress_ms: number;
   item: SpotifyTrackItem | null;
