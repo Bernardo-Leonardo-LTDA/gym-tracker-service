@@ -10,3 +10,7 @@ export interface UserPlaybackState extends SpotifyTrack {
   endsAt?: number;
   accessToken?: string;
 }
+
+export interface PlaybackSseEvent {
+  data: SpotifyTrack;
+}

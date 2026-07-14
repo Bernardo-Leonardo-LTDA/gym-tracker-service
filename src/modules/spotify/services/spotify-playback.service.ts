@@ -57,10 +57,7 @@ export class SpotifyPlaybackService implements OnModuleInit {
     }, 30000);
   }
 
-  async syncWebPlayback(
-    userId: string,
-    accessToken: string
-  ): Promise<UserPlaybackState> {
+  async syncWebPlayback(userId: string, accessToken: string): Promise<void> {
     try {
       const spotifyData =
         await this.spotifyService.getCurrentlyPlaying(accessToken);
@@ -71,7 +68,7 @@ export class SpotifyPlaybackService implements OnModuleInit {
           isPlaying: false,
         };
         this.playbackUpdates$.next({ userId, data: offlineState });
-        return offlineState;
+        return;
       }
 
       const timeLeftMs =
@@ -108,18 +105,14 @@ export class SpotifyPlaybackService implements OnModuleInit {
 
       this.timeouts.set(userId, timeout);
 
-      return state;
+      return;
     } catch (error) {
       console.log(
         'Error syncing with Spotify:',
         error instanceof Error ? error.message : error
       );
 
-      const offlineState: UserPlaybackState = {
-        isPlaying: false,
-      };
-
-      return offlineState;
+      return;
     }
   }
 
