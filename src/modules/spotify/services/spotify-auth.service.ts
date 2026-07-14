@@ -8,6 +8,7 @@ export class SpotifyAuthService {
   private readonly clientSecret: string;
   private readonly redirectUriWeb: string;
   private readonly redirectUriMobile: string;
+  private readonly scopes: string;
 
   constructor(private readonly config: ConfigService) {
     this.clientId = this.config.getOrThrow<string>('SPOTIFY_CLIENT_ID');
@@ -18,21 +19,15 @@ export class SpotifyAuthService {
     this.redirectUriMobile = this.config.getOrThrow<string>(
       'SPOTIFY_REDIRECT_URI_MOBILE'
     );
+    this.scopes = this.config.getOrThrow<string>('SPOTIFY_SCOPES');
   }
 
   getSpotifyAuthUrl(): string {
-    const scopes = [
-      'user-read-private',
-      'user-read-email',
-      'user-read-currently-playing',
-      'user-read-playback-state',
-    ].join(' ');
-
     const params = new URLSearchParams({
       client_id: this.clientId,
       response_type: 'code',
       redirect_uri: this.redirectUriWeb,
-      scope: scopes,
+      scope: this.scopes,
     });
 
     return `https://accounts.spotify.com/authorize?${params.toString()}`;
