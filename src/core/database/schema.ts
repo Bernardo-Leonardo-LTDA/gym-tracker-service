@@ -22,5 +22,7 @@ export const checkins = pgTable('checkins', {
     .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   externalPlaceId: varchar('external_place_id', { length: 255 }).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
