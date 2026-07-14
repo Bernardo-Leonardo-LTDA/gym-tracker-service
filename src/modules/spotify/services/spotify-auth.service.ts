@@ -4,62 +4,66 @@ import axios from 'axios';
 
 @Injectable()
 export class SpotifyAuthService {
-  constructor(private readonly config: ConfigService) {}
+  private readonly clientId: string;
+  private readonly clientSecret: string;
+  private readonly redirectUriWeb: string;
+  private readonly redirectUriMobile: string;
+
+  constructor(private readonly config: ConfigService) {
+    this.clientId = this.config.getOrThrow<string>('SPOTIFY_CLIENT_ID');
+    this.clientSecret = this.config.getOrThrow<string>('SPOTIFY_CLIENT_SECRET');
+    this.redirectUriWeb = this.config.getOrThrow<string>(
+      'SPOTIFY_REDIRECT_URI_WEB'
+    );
+    this.redirectUriMobile = this.config.getOrThrow<string>(
+      'SPOTIFY_REDIRECT_URI_MOBILE'
+    );
+  }
 
   getSpotifyAuthUrl(): string {
-    const clientId: string = '1f8530aa28bc4d4081ce9b4911cfe7d6';
-    const redirectUri: string = 'http://127.0.0.1:3000/auth/spotify/callback';
-    const scopes: string = [
+    const scopes = [
       'user-read-private',
       'user-read-email',
       'user-read-currently-playing',
       'user-read-playback-state',
     ].join(' ');
 
-    const params: URLSearchParams = new URLSearchParams({
-      client_id: clientId,
+    const params = new URLSearchParams({
+      client_id: this.clientId,
       response_type: 'code',
-      redirect_uri: redirectUri,
+      redirect_uri: this.redirectUriWeb,
       scope: scopes,
     });
 
-    return `https://accounts.spotify.com/authorize?${params}`;
+    return `https://accounts.spotify.com/authorize?${params.toString()}`;
   }
 
   async exchangeCodeWeb(code: string): Promise<string> {
-    const clientId: string = '1f8530aa28bc4d4081ce9b4911cfe7d6';
-    const clientSecret: string = '2cc93cdebd2741588a1ef7aac46b02bb';
-    const redirectUri: string = 'http://127.0.0.1:3000/auth/spotify/callback';
-
-    const params: URLSearchParams = new URLSearchParams({
+    const params = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: redirectUri,
+      redirect_uri: this.redirectUriWeb,
     });
 
-    const { data } = await axios.post<{
-      access_token: string;
-      refresh_token: string;
-      expires_in: number;
-    }>('https://accounts.spotify.com/api/token', params, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-      },
-    });
+    const { data } = await axios.post<{ access_token: string }>(
+      'https://accounts.spotify.com/api/token',
+      params,
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')}`,
+        },
+      }
+    );
 
     return data.access_token;
   }
 
   async exchangeCodeMobile(code: string, codeVerifier: string) {
-    const clientId: string = '1f8530aa28bc4d4081ce9b4911cfe7d6';
-    const clientSecret: string = '2cc93cdebd2741588a1ef7aac46b02bb';
-    const redirectUri: string = 'com.gymtracker.app://callback';
-
-    const params: URLSearchParams = new URLSearchParams({
+    const params = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: redirectUri,
+      redirect_uri: this.redirectUriMobile,
       code_verifier: codeVerifier,
     });
 
@@ -70,7 +74,7 @@ export class SpotifyAuthService {
     }>('https://accounts.spotify.com/api/token', params, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+        Authorization: `Basic ${Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')}`,
       },
     });
 
