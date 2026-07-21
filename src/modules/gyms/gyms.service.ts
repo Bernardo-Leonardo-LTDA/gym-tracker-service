@@ -64,4 +64,39 @@ export class GymsService {
 
     console.log(`User ${userId} checked in to gym ${gymId}`);
   }
+
+  async fetchCheckedUsersInMyGym(
+    gymId: string,
+    userId: string
+  ): Promise<schema.User[]> {
+
+    // check if user is checked in the last hour to the gym before fetching the list of checked-in users
+    const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
+
+    const userCheckedIn = await this.db.query.checkins.findFirst({
+      where: and(
+        eq(schema.checkins.externalPlaceId, gymId),
+        eq(schema.checkins.userId, userId),
+        gt(schema.checkins.createdAt, oneHourAgo)
+      ),
+    });
+
+    if (!userCheckedIn) {
+      throw new BadRequestException(
+        'User is not checked in to this gym. Cannot fetch checked-in users.'
+      );
+    }
+
+    const checkedInUsers = await this.db
+      .select({userId: schema.checkins.userId})
+      .from(schema.checkins)
+      .where(eq(schema.checkins.externalPlaceId, gymId));
+
+    const userIds = checkedInUsers.map((checkin) => checkin.userId);
+      const users = await this.db.query.users.findMany({
+        where: (users, { inArray }) => inArray(users.id, userIds),
+      });
+
+    return users;
+  }
 }

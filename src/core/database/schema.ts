@@ -26,3 +26,9 @@ export const checkins = pgTable('checkins', {
     .defaultNow()
     .notNull(),
 });
+
+export type User = typeof users.$inferSelect;
+export type CheckIn = typeof checkins.$inferSelect;
+
+export type NewUser = typeof users.$inferInsert;
+export type NewCheckIn = typeof checkins.$inferInsert;

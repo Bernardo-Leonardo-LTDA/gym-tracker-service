@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { GymsService } from './gyms.service';
 import { PlaceData } from '@googlemaps/google-maps-services-js';
+import { User } from 'src/core/database/schema';
 
 @Controller('gyms')
 export class GymsController {
@@ -19,6 +20,18 @@ export class GymsController {
     @Query('radius') radius?: number
   ): Promise<Partial<PlaceData>[]> {
     const response = await this.gymsService.searchGymsNearby(address, radius);
+    return response;
+  }
+
+  @Get('checked-users')
+  async fetchCheckedUsersInMyGym(
+    @Query('gymId') gymId: string,
+    @Query('userId', ParseUUIDPipe) userId: string
+  ): Promise<User[]> {
+    const response = await this.gymsService.fetchCheckedUsersInMyGym(
+      gymId,
+      userId
+    );
     return response;
   }
 
