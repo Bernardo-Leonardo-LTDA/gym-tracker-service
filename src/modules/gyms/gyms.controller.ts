@@ -42,4 +42,11 @@ export class GymsController {
   ): Promise<void> {
     await this.gymsService.checkIn(gymId, userId);
   }
+
+  @Post('check-out')
+  async checkOut(
+    @Body('checkInId', ParseUUIDPipe) checkInId: string
+  ): Promise<void> {
+    await this.gymsService.checkOut(checkInId);
+  }
 }

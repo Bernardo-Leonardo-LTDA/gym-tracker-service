@@ -69,7 +69,6 @@ export class GymsService {
     gymId: string,
     userId: string
   ): Promise<schema.User[]> {
-
     // check if user is checked in the last hour to the gym before fetching the list of checked-in users
     const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
 
@@ -88,15 +87,32 @@ export class GymsService {
     }
 
     const checkedInUsers = await this.db
-      .select({userId: schema.checkins.userId})
+      .select({ userId: schema.checkins.userId })
       .from(schema.checkins)
       .where(eq(schema.checkins.externalPlaceId, gymId));
 
     const userIds = checkedInUsers.map((checkin) => checkin.userId);
-      const users = await this.db.query.users.findMany({
-        where: (users, { inArray }) => inArray(users.id, userIds),
-      });
+    const users = await this.db.query.users.findMany({
+      where: (users, { inArray }) => inArray(users.id, userIds),
+    });
 
     return users;
+  }
+
+  async checkOut(checkInId: string): Promise<void> {
+    const checkin = await this.db
+      .select()
+      .from(schema.checkins)
+      .where(eq(schema.checkins.id, checkInId));
+
+    if (checkin.length === 0) {
+      throw new NotFoundException('Check-in not found');
+    }
+
+    await this.db
+      .delete(schema.checkins)
+      .where(eq(schema.checkins.id, checkInId));
+
+    console.log(`User checked out from gym`);
   }
 }
