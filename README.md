@@ -55,6 +55,7 @@ src/
 ## 🗄️ Database & Drizzle ORM
 
 This project uses **PostgreSQL** as the database and **[Drizzle ORM](https://orm.drizzle.team/)** for data modeling, type safety (TypeScript), and query execution.
+The setup was made following**[Drizzle Postgres official DOC](https://orm.drizzle.team/docs/get-started/postgresql-new)**
 
 ### 1. Running the Database (Docker)
 
