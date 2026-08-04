@@ -15,6 +15,13 @@
       "when": 1783991282072,
       "tag": "0001_small_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785802359322,
+      "tag": "0002_skinny_killmonger",
+      "breakpoints": true
     }
   ]
 }
