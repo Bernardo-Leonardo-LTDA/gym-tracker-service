@@ -4,6 +4,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import jest from 'eslint-plugin-jest';
 
 export default defineConfig([
   // Ignora globalmente as pastas de build e ferramentas
@@ -41,6 +42,16 @@ export default defineConfig([
           varsIgnorePattern: '^_',
         },
       ],
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
+    extends: [jest.configs['flat/recommended']],
+  },
+  {
+    files: ['**/*.e2e-spec.ts'],
+    rules: {
+      'jest/expect-expect': 'off',
     },
   },
 ]);
