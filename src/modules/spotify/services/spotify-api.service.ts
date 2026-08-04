@@ -37,7 +37,7 @@ export class SpotifyApiService {
           ? error.response.status
           : HttpStatus.INTERNAL_SERVER_ERROR;
 
-      throw new HttpException('Erro ao buscar status do player', status);
+      throw new HttpException('Failed to fetch player status', status);
     }
   }
 }

@@ -76,8 +76,8 @@ export class SpotifyPlaybackService implements OnModuleInit {
       const endsAt = Date.now() + timeLeftMs;
 
       const state: UserPlaybackState = {
-        trackName: spotifyData.trackName ?? 'Desconhecido',
-        artist: spotifyData.artist ?? 'Desconhecido',
+        trackName: spotifyData.trackName ?? 'Unknown',
+        artist: spotifyData.artist ?? 'Unknown',
         isPlaying: spotifyData.isPlaying,
         endsAt,
         accessToken,
