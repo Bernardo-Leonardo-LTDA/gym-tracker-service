@@ -9,7 +9,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from 'src/core/database/schema';
 import { DRIZZLE_PROVIDER } from 'src/core/database/database.provider';
 import { MapsService } from 'src/shared/services/maps/maps.service';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 @Injectable()
 export class GymsService {
@@ -31,52 +31,65 @@ export class GymsService {
     return gyms;
   }
 
-  async checkIn(gymId: string, userId: string): Promise<void> {
-    const userExists = await this.db.query.users.findFirst({
-      where: eq(schema.users.id, userId),
-    });
+  async checkIn(
+    gymId: string,
+    userInfo: { userId: string | null; name?: string }
+  ): Promise<schema.User> {
+    let user: schema.User;
 
-    if (!userExists) {
-      throw new NotFoundException('User not found');
+    if (userInfo.userId) {
+      const existingUser = await this.db.query.users.findFirst({
+        where: eq(schema.users.id, userInfo.userId),
+      });
+
+      if (!existingUser) {
+        throw new NotFoundException('User not found');
+      }
+
+      user = existingUser;
+    } else {
+      if (!userInfo.name) {
+        throw new BadRequestException('Name is required to create a new user');
+      }
+
+      const [createdUser] = await this.db
+        .insert(schema.users)
+        .values({ name: userInfo.name })
+        .returning();
+
+      user = createdUser;
     }
 
-    const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
+    const activeCheckin = await this.db.query.checkins.findFirst({
+      where: and(
+        eq(schema.checkins.userId, user.id),
+        eq(schema.checkins.isActive, true)
+      ),
+    });
 
-    const recentCheckin = await this.db
-      .select()
-      .from(schema.checkins)
-      .where(
-        and(
-          eq(schema.checkins.userId, userId),
-          gt(schema.checkins.createdAt, oneHourAgo)
-        )
-      );
-
-    if (recentCheckin.length > 0) {
-      throw new BadRequestException(
-        'User has already checked in within the last hour'
-      );
+    if (activeCheckin) {
+      throw new BadRequestException('User is already checked in');
     }
 
     await this.db
       .insert(schema.checkins)
-      .values({ externalPlaceId: gymId, userId });
+      .values({ externalPlaceId: gymId, userId: user.id });
 
-    console.log(`User ${userId} checked in to gym ${gymId}`);
+    console.log(`User ${user.id} checked in to gym ${gymId}`);
+
+    return user;
   }
 
   async fetchCheckedUsersInMyGym(
     gymId: string,
     userId: string
   ): Promise<schema.User[]> {
-    // check if user is checked in the last hour to the gym before fetching the list of checked-in users
-    const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
-
+    // check if user is checked in to the gym before fetching the list of checked-in users
     const userCheckedIn = await this.db.query.checkins.findFirst({
       where: and(
         eq(schema.checkins.externalPlaceId, gymId),
         eq(schema.checkins.userId, userId),
-        gt(schema.checkins.createdAt, oneHourAgo)
+        eq(schema.checkins.isActive, true)
       ),
     });
 
@@ -89,7 +102,12 @@ export class GymsService {
     const checkedInUsers = await this.db
       .select({ userId: schema.checkins.userId })
       .from(schema.checkins)
-      .where(eq(schema.checkins.externalPlaceId, gymId));
+      .where(
+        and(
+          eq(schema.checkins.externalPlaceId, gymId),
+          eq(schema.checkins.isActive, true)
+        )
+      );
 
     const userIds = checkedInUsers.map((checkin) => checkin.userId);
     const users = await this.db.query.users.findMany({
@@ -99,20 +117,23 @@ export class GymsService {
     return users;
   }
 
-  async checkOut(checkInId: string): Promise<void> {
-    const checkin = await this.db
-      .select()
-      .from(schema.checkins)
-      .where(eq(schema.checkins.id, checkInId));
+  async checkOut(userId: string): Promise<void> {
+    const activeCheckin = await this.db.query.checkins.findFirst({
+      where: and(
+        eq(schema.checkins.userId, userId),
+        eq(schema.checkins.isActive, true)
+      ),
+    });
 
-    if (checkin.length === 0) {
-      throw new NotFoundException('Check-in not found');
+    if (!activeCheckin) {
+      throw new BadRequestException('No active check-in to check out from');
     }
 
     await this.db
-      .delete(schema.checkins)
-      .where(eq(schema.checkins.id, checkInId));
+      .update(schema.checkins)
+      .set({ isActive: false })
+      .where(eq(schema.checkins.id, activeCheckin.id));
 
-    console.log(`User checked out from gym`);
+    console.log(`User ${userId} checked out from gym`);
   }
 }

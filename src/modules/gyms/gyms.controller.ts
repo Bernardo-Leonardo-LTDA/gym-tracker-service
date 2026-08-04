@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   ParseUUIDPipe,
   Post,
   Query,
@@ -38,15 +39,16 @@ export class GymsController {
   @Post('check-in')
   async checkIn(
     @Body('gymId') gymId: string,
-    @Body('userId', ParseUUIDPipe) userId: string
-  ): Promise<void> {
-    await this.gymsService.checkIn(gymId, userId);
+    @Body('userId', ParseUUIDPipe) userId: string | null,
+    @Body('userName') name?: string
+  ): Promise<User> {
+    const userInfo = { userId, name };
+    return this.gymsService.checkIn(gymId, userInfo);
   }
 
   @Post('check-out')
-  async checkOut(
-    @Body('checkInId', ParseUUIDPipe) checkInId: string
-  ): Promise<void> {
-    await this.gymsService.checkOut(checkInId);
+  @HttpCode(204)
+  async checkOut(@Body('userId', ParseUUIDPipe) userId: string): Promise<void> {
+    await this.gymsService.checkOut(userId);
   }
 }
