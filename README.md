@@ -66,6 +66,18 @@ docker pull postgres
 docker run --name <db-name> -e POSTGRES_PASSWORD=<password> -d -p 5432:5432 postgres
 ```
 
+Alternatively, run the database and the Nest app together (starts the DB container if it isn't running, then boots the app in watch mode):
+
+```bash
+npm run dev:db
+```
+
+To only start the local database container, run:
+
+```bash
+npm run local-db:up
+```
+
 ### 2. Connecting to the Database
 
 To manually connect to the DB and test it you should run:
