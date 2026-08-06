@@ -55,6 +55,7 @@ src/
 ## 🗄️ Database & Drizzle ORM
 
 This project uses **PostgreSQL** as the database and **[Drizzle ORM](https://orm.drizzle.team/)** for data modeling, type safety (TypeScript), and query execution.
+The setup was made following**[Drizzle Postgres official DOC](https://orm.drizzle.team/docs/get-started/postgresql-new)**
 
 ### 1. Running the Database (Docker)
 
@@ -63,6 +64,18 @@ To run the database locally in an isolated environment, we use Docker. Run the c
 ```bash
 docker pull postgres
 docker run --name <db-name> -e POSTGRES_PASSWORD=<password> -d -p 5432:5432 postgres
+```
+
+Alternatively, run the database and the Nest app together (starts the DB container if it isn't running, then boots the app in watch mode):
+
+```bash
+npm run dev:db
+```
+
+To only start the local database container, run:
+
+```bash
+npm run local-db:up
 ```
 
 ### 2. Connecting to the Database

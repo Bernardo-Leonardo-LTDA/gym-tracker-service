@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean } from 'drizzle-orm/pg-core';
 
 // Users table (Save current music state)
 export const users = pgTable('users', {
@@ -22,5 +22,14 @@ export const checkins = pgTable('checkins', {
     .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   externalPlaceId: varchar('external_place_id', { length: 255 }).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
+
+export type User = typeof users.$inferSelect;
+export type CheckIn = typeof checkins.$inferSelect;
+
+export type NewUser = typeof users.$inferInsert;
+export type NewCheckIn = typeof checkins.$inferInsert;
