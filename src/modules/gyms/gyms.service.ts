@@ -9,7 +9,8 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from 'src/core/database/schema';
 import { DRIZZLE_PROVIDER } from 'src/core/database/database.provider';
 import { MapsService } from 'src/shared/services/maps/maps.service';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, lt } from 'drizzle-orm';
+import { Cron } from '@nestjs/schedule';
 
 @Injectable()
 export class GymsService {
@@ -135,5 +136,20 @@ export class GymsService {
       .where(eq(schema.checkins.id, activeCheckin.id));
 
     console.log(`User ${userId} checked out from gym`);
+  }
+
+  @Cron('0 */12 * * *') // Runs every 12 hours
+  async cleanupInactiveCheckins(): Promise<void> {
+    // get all checkins that are active and older than 12 hours
+    console.log('[ROUTINE]: Cleaning up inactive check-ins...');
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    try {
+      await this.db
+        .update(schema.checkins)
+        .set({ isActive: false })
+        .where(lt(schema.checkins.createdAt, twelveHoursAgo));
+    } catch (error) {
+      console.error('Error during cleanup of inactive check-ins:', error);
+    }
   }
 }
