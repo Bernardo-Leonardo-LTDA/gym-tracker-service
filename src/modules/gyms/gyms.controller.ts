@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { GymsService } from './gyms.service';
 import { PlaceData } from '@googlemaps/google-maps-services-js';
-import { User } from 'src/core/database/schema';
+import { User } from '../../core/database/schema';
 
 @Controller('gyms')
 export class GymsController {

@@ -6,9 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from 'src/core/database/schema';
-import { DRIZZLE_PROVIDER } from 'src/core/database/database.provider';
-import { MapsService } from 'src/shared/services/maps/maps.service';
+import * as schema from '../../core/database/schema';
+import { DRIZZLE_PROVIDER } from '../../core/database/database.provider';
+import { MapsService } from '../../shared/services/maps/maps.service';
 import { eq, and, lt } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 

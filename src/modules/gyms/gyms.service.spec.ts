@@ -1,13 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { GymsService } from './gyms.service';
-import { MapsService } from 'src/shared/services/maps/maps.service';
-import { DRIZZLE_PROVIDER } from 'src/core/database/database.provider';
-import * as schema from 'src/core/database/schema';
+import { MapsService } from '../../shared/services/maps/maps.service';
+import { DRIZZLE_PROVIDER } from '../../core/database/database.provider';
+import * as schema from '../../core/database/schema';
 import { lt } from 'drizzle-orm';
 
 jest.mock('drizzle-orm', () => {
-  const actual = jest.requireActual<typeof import('drizzle-orm')>('drizzle-orm');
+  const actual =
+    jest.requireActual<typeof import('drizzle-orm')>('drizzle-orm');
   return {
     eq: actual.eq,
     and: actual.and,
@@ -301,8 +302,10 @@ describe('GymsService', () => {
       // assert
       expect(db.update).toHaveBeenCalledWith(schema.checkins);
       expect(setMock).toHaveBeenCalledWith({ isActive: false });
-      const [column, cutoff] = (lt as jest.Mock).mock
-        .calls[0] as [unknown, Date];
+      const [column, cutoff] = (lt as jest.Mock).mock.calls[0] as [
+        unknown,
+        Date,
+      ];
       expect(column).toBe(schema.checkins.createdAt);
       expect(cutoff).toEqual(new Date('2025-01-01T00:00:00Z'));
     });
