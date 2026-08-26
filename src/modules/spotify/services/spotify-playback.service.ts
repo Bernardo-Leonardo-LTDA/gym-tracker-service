@@ -1,35 +1,44 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { SpotifyApiService } from './spotify-api.service';
 import { Subject } from 'rxjs';
-import { UserPlaybackState } from '../interfaces/playback-manager.interface';
+import {
+  SpotifyTrack,
+  UserPlaybackState,
+} from '../interfaces/spotify-playback.interface';
 
 @Injectable()
-export class PlaybackManagerService implements OnModuleInit {
+export class SpotifyPlaybackService implements OnModuleInit {
   private activePlaybacks = new Map<string, UserPlaybackState>();
   private timeouts = new Map<string, NodeJS.Timeout>();
+  private intervalRef: NodeJS.Timeout | undefined;
 
   public playbackUpdates$ = new Subject<{ userId: string; data: any }>();
 
   constructor(private readonly spotifyService: SpotifyApiService) {}
 
   onModuleInit() {
-    this.startBackgroundFallbackCheck();
+    this.intervalRef = this.startBackgroundFallbackCheck();
   }
 
-  private startBackgroundFallbackCheck(): void {
-    setInterval(() => {
+  onModuleDestroy() {
+    clearInterval(this.intervalRef);
+    this.timeouts.forEach((timeout) => clearTimeout(timeout));
+    this.timeouts.clear();
+  }
+
+  private startBackgroundFallbackCheck(): NodeJS.Timeout {
+    return setInterval(() => {
       void (async () => {
         if (this.activePlaybacks.size === 0) return;
 
         for (const [userId, state] of this.activePlaybacks.entries()) {
-          if (state.endsAt === 0) continue;
+          if (state.endsAt === 0 || !state.accessToken) continue;
 
           try {
-            const spotifyData = await this.spotifyService.getCurrentlyPlaying(
-              state.accessToken
-            );
+            const spotifyData: SpotifyTrack =
+              await this.spotifyService.getCurrentlyPlaying(state.accessToken);
 
-            if (!spotifyData || !spotifyData.is_playing) {
+            if (!spotifyData || !spotifyData.isPlaying) {
               this.activePlaybacks.delete(userId);
               this.clearUserTimeout(userId);
 
@@ -37,7 +46,7 @@ export class PlaybackManagerService implements OnModuleInit {
                 userId,
                 data: { isPlaying: false },
               });
-            } else if (spotifyData.item?.name !== state.trackName) {
+            } else if (spotifyData.trackName !== state.trackName) {
               void this.syncWebPlayback(userId, state.accessToken);
             }
           } catch {
@@ -48,37 +57,32 @@ export class PlaybackManagerService implements OnModuleInit {
     }, 30000);
   }
 
-  async syncWebPlayback(
-    userId: string,
-    accessToken: string
-  ): Promise<UserPlaybackState> {
+  async syncWebPlayback(userId: string, accessToken: string): Promise<void> {
     try {
       const spotifyData =
         await this.spotifyService.getCurrentlyPlaying(accessToken);
 
-      if (!spotifyData || !spotifyData.is_playing) {
+      if (!spotifyData || !spotifyData.isPlaying) {
         this.activePlaybacks.delete(userId);
         const offlineState: UserPlaybackState = {
           isPlaying: false,
-        } as UserPlaybackState;
+        };
         this.playbackUpdates$.next({ userId, data: offlineState });
-        return offlineState;
+        return;
       }
 
       const timeLeftMs =
-        (spotifyData.item?.duration_ms ?? 0) - (spotifyData.progress_ms ?? 0);
+        (spotifyData.durationMs ?? 0) - (spotifyData.progressMs ?? 0);
       const endsAt = Date.now() + timeLeftMs;
 
       const state: UserPlaybackState = {
-        trackName: spotifyData.item?.name ?? 'Desconhecido',
-        artist:
-          spotifyData.item?.artists?.map((artist) => artist.name).join(', ') ??
-          'Desconhecido',
-        isPlaying: spotifyData.is_playing,
+        trackName: spotifyData.trackName ?? 'Unknown',
+        artist: spotifyData.artist ?? 'Unknown',
+        isPlaying: spotifyData.isPlaying,
         endsAt,
         accessToken,
-        progressMs: spotifyData.progress_ms,
-        durationMs: spotifyData.item?.duration_ms ?? 0,
+        progressMs: spotifyData.progressMs,
+        durationMs: spotifyData.durationMs ?? 0,
       };
 
       this.activePlaybacks.set(userId, state);
@@ -101,30 +105,20 @@ export class PlaybackManagerService implements OnModuleInit {
 
       this.timeouts.set(userId, timeout);
 
-      return state;
+      return;
     } catch (error) {
       console.log(
         'Error syncing with Spotify:',
         error instanceof Error ? error.message : error
       );
 
-      const offlineState: UserPlaybackState = {
-        isPlaying: false,
-      } as UserPlaybackState;
-
-      return offlineState;
+      return;
     }
   }
 
   updatePlaybackFromMobile(
     userId: string,
-    mobileData: {
-      trackName: string;
-      artist: string;
-      isPlaying: boolean;
-      progressMs?: number;
-      durationMs?: number;
-    }
+    mobileData: SpotifyTrack
   ): UserPlaybackState {
     this.clearUserTimeout(userId);
 
@@ -154,10 +148,10 @@ export class PlaybackManagerService implements OnModuleInit {
     return state;
   }
 
-  getLiveStatus(userId: string): UserPlaybackState {
+  getLiveStatus(userId: string): SpotifyTrack {
     const data = this.activePlaybacks.get(userId);
 
-    if (!data) return { isPlaying: false } as UserPlaybackState;
+    if (!data) return { isPlaying: false };
 
     return {
       trackName: data.trackName,
@@ -165,7 +159,7 @@ export class PlaybackManagerService implements OnModuleInit {
       isPlaying: data.isPlaying,
       progressMs: data.progressMs,
       durationMs: data.durationMs,
-    } as UserPlaybackState;
+    };
   }
 
   private clearUserTimeout(userId: string) {

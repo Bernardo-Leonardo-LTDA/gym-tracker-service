@@ -1,14 +1,13 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import axios from 'axios';
-import { SpotifyPlaybackState } from '../interfaces/spotify-api.interface';
+import { SpotifyTrack } from '../interfaces/spotify-playback.interface';
+import type { SpotifyCurrentlyPlaying } from '../interfaces/spotify-api.interface';
 
 @Injectable()
 export class SpotifyApiService {
-  async getCurrentlyPlaying(
-    accessToken: string
-  ): Promise<SpotifyPlaybackState> {
+  async getCurrentlyPlaying(accessToken: string): Promise<SpotifyTrack> {
     try {
-      const response = await axios.get<SpotifyPlaybackState>(
+      const response = await axios.get<SpotifyCurrentlyPlaying>(
         'https://api.spotify.com/v1/me/player/currently-playing',
         {
           headers: {
@@ -19,18 +18,18 @@ export class SpotifyApiService {
 
       if (response.status === 204 || !response.data) {
         return {
-          is_playing: false,
-          item: null,
-          progress_ms: 0,
+          isPlaying: false,
         };
       }
 
-      const data: SpotifyPlaybackState = response.data;
+      const data: SpotifyCurrentlyPlaying = response.data;
 
       return {
-        is_playing: data.is_playing,
-        item: data.item,
-        progress_ms: data.progress_ms,
+        isPlaying: data.is_playing,
+        trackName: data.item?.name,
+        artist: data.item?.artists?.map((artist) => artist.name).join(', '),
+        progressMs: data.progress_ms,
+        durationMs: data.item?.duration_ms,
       };
     } catch (error) {
       const status =
@@ -38,7 +37,7 @@ export class SpotifyApiService {
           ? error.response.status
           : HttpStatus.INTERNAL_SERVER_ERROR;
 
-      throw new HttpException('Erro ao buscar status do player', status);
+      throw new HttpException('Failed to fetch player status', status);
     }
   }
 }
