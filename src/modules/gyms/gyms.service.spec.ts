@@ -12,6 +12,7 @@ jest.mock('drizzle-orm', () => {
   return {
     eq: actual.eq,
     and: actual.and,
+    count: actual.count,
     lt: jest.fn(actual.lt),
     inArray: actual.inArray,
   };
@@ -242,6 +243,39 @@ describe('GymsService', () => {
       // assert
       expect(db.query.checkins.findFirst).toHaveBeenCalled();
       expect(result).toEqual(users);
+    });
+  });
+
+  describe('countCheckedInUsers', () => {
+    const stubGroupedCounts = (rows: unknown[]) => {
+      const groupBy = jest.fn().mockResolvedValue(rows);
+      db.select.mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({ groupBy }),
+        }),
+      });
+      return groupBy;
+    };
+
+    it('should return active check-in counts for every requested gym', async () => {
+      stubGroupedCounts([
+        { gymId: 'gym-1', count: 2 },
+        { gymId: 'gym-2', count: 1 },
+      ]);
+
+      await expect(
+        service.countCheckedInUsers(['gym-1', 'gym-2', 'gym-3'])
+      ).resolves.toEqual({
+        'gym-1': 2,
+        'gym-2': 1,
+        'gym-3': 0,
+      });
+    });
+
+    it('should skip the database query when no gyms are requested', async () => {
+      await expect(service.countCheckedInUsers([])).resolves.toEqual({});
+
+      expect(db.select).not.toHaveBeenCalled();
     });
   });
 

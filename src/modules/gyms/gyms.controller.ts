@@ -36,6 +36,13 @@ export class GymsController {
     return response;
   }
 
+  @Post('checked-users/counts')
+  async countCheckedInUsers(
+    @Body('gymIds') gymIds: string[]
+  ): Promise<Record<string, number>> {
+    return this.gymsService.countCheckedInUsers(gymIds);
+  }
+
   @Post('check-in')
   async checkIn(
     @Body('gymId') gymId: string,

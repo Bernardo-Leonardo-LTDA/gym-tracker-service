@@ -9,7 +9,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../core/database/schema';
 import { DRIZZLE_PROVIDER } from '../../core/database/database.provider';
 import { MapsService } from '../../shared/services/maps/maps.service';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, count, inArray, lt } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 
 @Injectable()
@@ -116,6 +116,33 @@ export class GymsService {
     });
 
     return users;
+  }
+
+  async countCheckedInUsers(gymIds: string[]): Promise<Record<string, number>> {
+    const uniqueGymIds = [...new Set(gymIds)];
+    const counts = Object.fromEntries(uniqueGymIds.map((gymId) => [gymId, 0]));
+
+    if (uniqueGymIds.length === 0) return counts;
+
+    const activeCheckinsByGym = await this.db
+      .select({
+        gymId: schema.checkins.externalPlaceId,
+        count: count(),
+      })
+      .from(schema.checkins)
+      .where(
+        and(
+          inArray(schema.checkins.externalPlaceId, uniqueGymIds),
+          eq(schema.checkins.isActive, true)
+        )
+      )
+      .groupBy(schema.checkins.externalPlaceId);
+
+    for (const checkinCount of activeCheckinsByGym) {
+      counts[checkinCount.gymId] = checkinCount.count;
+    }
+
+    return counts;
   }
 
   async checkOut(userId: string): Promise<void> {
