@@ -245,6 +245,14 @@ describe('GymsService', () => {
     });
   });
 
+  describe('countCheckedInUsers', () => {
+    it('should return the number of active check-ins for a gym', async () => {
+      stubSelectWhere([{ userId: 'user-1' }, { userId: 'user-2' }]);
+
+      await expect(service.countCheckedInUsers('gym-1')).resolves.toBe(2);
+    });
+  });
+
   describe('checkOut', () => {
     it('should set the active check-in to inactive', async () => {
       // arrange

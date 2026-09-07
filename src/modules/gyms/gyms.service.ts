@@ -118,6 +118,20 @@ export class GymsService {
     return users;
   }
 
+  async countCheckedInUsers(gymId: string): Promise<number> {
+    const checkedInUsers = await this.db
+      .select({ userId: schema.checkins.userId })
+      .from(schema.checkins)
+      .where(
+        and(
+          eq(schema.checkins.externalPlaceId, gymId),
+          eq(schema.checkins.isActive, true)
+        )
+      );
+
+    return checkedInUsers.length;
+  }
+
   async checkOut(userId: string): Promise<void> {
     const activeCheckin = await this.db.query.checkins.findFirst({
       where: and(

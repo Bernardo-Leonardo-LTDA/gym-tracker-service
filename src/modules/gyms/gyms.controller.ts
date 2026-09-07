@@ -36,6 +36,14 @@ export class GymsController {
     return response;
   }
 
+  @Get('checked-users/count')
+  async countCheckedInUsers(
+    @Query('gymId') gymId: string
+  ): Promise<{ count: number }> {
+    const count = await this.gymsService.countCheckedInUsers(gymId);
+    return { count };
+  }
+
   @Post('check-in')
   async checkIn(
     @Body('gymId') gymId: string,
