@@ -36,12 +36,11 @@ export class GymsController {
     return response;
   }
 
-  @Get('checked-users/count')
+  @Post('checked-users/counts')
   async countCheckedInUsers(
-    @Query('gymId') gymId: string
-  ): Promise<{ count: number }> {
-    const count = await this.gymsService.countCheckedInUsers(gymId);
-    return { count };
+    @Body('gymIds') gymIds: string[]
+  ): Promise<Record<string, number>> {
+    return this.gymsService.countCheckedInUsers(gymIds);
   }
 
   @Post('check-in')
