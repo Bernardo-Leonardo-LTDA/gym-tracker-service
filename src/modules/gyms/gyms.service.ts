@@ -81,25 +81,7 @@ export class GymsService {
     return user;
   }
 
-  async fetchCheckedUsersInMyGym(
-    gymId: string,
-    userId: string
-  ): Promise<schema.User[]> {
-    // check if user is checked in to the gym before fetching the list of checked-in users
-    const userCheckedIn = await this.db.query.checkins.findFirst({
-      where: and(
-        eq(schema.checkins.externalPlaceId, gymId),
-        eq(schema.checkins.userId, userId),
-        eq(schema.checkins.isActive, true)
-      ),
-    });
-
-    if (!userCheckedIn) {
-      throw new BadRequestException(
-        'User is not checked in to this gym. Cannot fetch checked-in users.'
-      );
-    }
-
+  async fetchCheckedUsersInGym(gymId: string): Promise<schema.User[]> {
     const checkedInUsers = await this.db
       .select({ userId: schema.checkins.userId })
       .from(schema.checkins)
