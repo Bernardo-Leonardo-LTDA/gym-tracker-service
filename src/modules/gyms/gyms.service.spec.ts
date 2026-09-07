@@ -115,7 +115,7 @@ describe('GymsService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('searchGymsNearby', () => {
+  describe('searchGymsByAddress', () => {
     it('should return the gyms found near the address', async () => {
       // arrange
       const gyms = [{ placeId: 'place-1' }];
@@ -123,7 +123,7 @@ describe('GymsService', () => {
       maps.nearbySearch.mockResolvedValue(gyms);
 
       // act
-      const result = await service.searchGymsNearby('address', 1000);
+      const result = await service.searchGymsByAddress('address', 1000);
 
       // assert
       expect(maps.geocodeAddress).toHaveBeenCalledWith('address');
@@ -136,9 +136,26 @@ describe('GymsService', () => {
       maps.geocodeAddress.mockResolvedValue({ lat: undefined, lng: undefined });
 
       // act & assert
-      await expect(service.searchGymsNearby('address')).rejects.toThrow(
+      await expect(service.searchGymsByAddress('address')).rejects.toThrow(
         NotFoundException
       );
+    });
+  });
+
+  describe('searchGymsByCoordinates', () => {
+    it('should return nearby gyms using coordinates', async () => {
+      const gyms = [{ id: 'nearby-place' }];
+      maps.nearbySearch.mockResolvedValue(gyms);
+
+      const result = await service.searchGymsByCoordinates(-23.55, -46.63);
+
+      expect(maps.nearbySearch).toHaveBeenCalledWith(
+        -23.55,
+        -46.63,
+        5000,
+        'gym'
+      );
+      expect(result).toEqual(gyms);
     });
   });
 
