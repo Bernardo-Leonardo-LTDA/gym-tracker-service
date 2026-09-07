@@ -25,10 +25,14 @@ export class GymsController {
   }
 
   @Get('checked-users')
-  async fetchCheckedUsersInGym(
-    @Query('gymId') gymId: string
+  async fetchCheckedUsersInMyGym(
+    @Query('gymId') gymId: string,
+    @Query('userId', ParseUUIDPipe) userId: string
   ): Promise<User[]> {
-    const response = await this.gymsService.fetchCheckedUsersInGym(gymId);
+    const response = await this.gymsService.fetchCheckedUsersInMyGym(
+      gymId,
+      userId
+    );
     return response;
   }
 

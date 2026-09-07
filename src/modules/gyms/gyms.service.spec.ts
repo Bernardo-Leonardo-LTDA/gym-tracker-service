@@ -212,9 +212,23 @@ describe('GymsService', () => {
     });
   });
 
-  describe('fetchCheckedUsersInGym', () => {
+  describe('fetchCheckedUsersInMyGym', () => {
+    it('should throw when the user is not checked in', async () => {
+      // arrange
+      db.query.checkins.findFirst.mockResolvedValue(undefined);
+
+      // act & assert
+      await expect(
+        service.fetchCheckedUsersInMyGym('gym-1', 'user-1')
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should return the users checked into the gym', async () => {
       // arrange
+      db.query.checkins.findFirst.mockResolvedValue({
+        id: 'checkin-1',
+        userId: existingUser.id,
+      });
       stubSelectWhere([{ userId: 'user-1' }, { userId: 'user-2' }]);
       const users = [
         existingUser,
@@ -223,9 +237,10 @@ describe('GymsService', () => {
       db.query.users.findMany.mockResolvedValue(users);
 
       // act
-      const result = await service.fetchCheckedUsersInGym('gym-1');
+      const result = await service.fetchCheckedUsersInMyGym('gym-1', 'user-1');
 
       // assert
+      expect(db.query.checkins.findFirst).toHaveBeenCalled();
       expect(result).toEqual(users);
     });
   });
