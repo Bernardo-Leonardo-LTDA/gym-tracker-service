@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
   HttpCode,
@@ -8,20 +9,45 @@ import {
   Query,
 } from '@nestjs/common';
 import { GymsService } from './gyms.service';
-import { PlaceData } from '@googlemaps/google-maps-services-js';
 import { User } from '../../core/database/schema';
+import {
+  Coordinates,
+  PlaceSearchResult,
+} from '../../shared/services/maps/maps.interface';
 
 @Controller('gyms')
 export class GymsController {
   constructor(private gymsService: GymsService) {}
 
   @Get('search')
+  async searchGymsByAddress(
+    @Query('address') address?: string,
+    @Query('radius') radius?: string
+  ): Promise<PlaceSearchResult[]> {
+    const searchAddress = address?.trim();
+    if (!searchAddress) {
+      throw new BadRequestException('Address is required');
+    }
+
+    const searchRadius = this.parseRadius(radius, 5000);
+
+    return this.gymsService.searchGymsByAddress(searchAddress, searchRadius);
+  }
+
+  @Get('nearby')
   async searchGymsNearby(
-    @Query('address') address: string,
-    @Query('radius') radius?: number
-  ): Promise<Partial<PlaceData>[]> {
-    const response = await this.gymsService.searchGymsNearby(address, radius);
-    return response;
+    @Query('latitude') latitude?: string,
+    @Query('longitude') longitude?: string,
+    @Query('radius') radius?: string
+  ): Promise<PlaceSearchResult[]> {
+    const origin = this.parseRequiredCoordinates(latitude, longitude);
+    const searchRadius = this.parseRadius(radius, 5000);
+
+    return this.gymsService.searchGymsByCoordinates(
+      origin.latitude,
+      origin.longitude,
+      searchRadius
+    );
   }
 
   @Get('checked-users')
@@ -50,5 +76,52 @@ export class GymsController {
   @HttpCode(204)
   async checkOut(@Body('userId', ParseUUIDPipe) userId: string): Promise<void> {
     await this.gymsService.checkOut(userId);
+  }
+
+  private parseRequiredCoordinates(
+    latitude?: string,
+    longitude?: string
+  ): Coordinates {
+    const parsedLatitude = Number(latitude);
+    const parsedLongitude = Number(longitude);
+
+    if (
+      latitude === undefined ||
+      longitude === undefined ||
+      !Number.isFinite(parsedLatitude) ||
+      !Number.isFinite(parsedLongitude) ||
+      parsedLatitude < -90 ||
+      parsedLatitude > 90 ||
+      parsedLongitude < -180 ||
+      parsedLongitude > 180
+    ) {
+      throw new BadRequestException(
+        'Valid latitude and longitude are required'
+      );
+    }
+
+    return {
+      latitude: parsedLatitude,
+      longitude: parsedLongitude,
+    };
+  }
+
+  private parseRadius(radius: string | undefined, fallback: number): number {
+    if (radius === undefined) {
+      return fallback;
+    }
+
+    const parsedRadius = Number(radius);
+    if (
+      !Number.isFinite(parsedRadius) ||
+      parsedRadius <= 0 ||
+      parsedRadius > 50_000
+    ) {
+      throw new BadRequestException(
+        'Radius must be between 1 and 50000 meters'
+      );
+    }
+
+    return parsedRadius;
   }
 }

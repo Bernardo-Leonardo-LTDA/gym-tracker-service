@@ -1,4 +1,3 @@
-import { PlaceData } from '@googlemaps/google-maps-services-js';
 import {
   BadRequestException,
   Inject,
@@ -11,6 +10,7 @@ import { DRIZZLE_PROVIDER } from '../../core/database/database.provider';
 import { MapsService } from '../../shared/services/maps/maps.service';
 import { eq, and, lt } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
+import { PlaceSearchResult } from '../../shared/services/maps/maps.interface';
 
 @Injectable()
 export class GymsService {
@@ -19,10 +19,10 @@ export class GymsService {
     private mapsService: MapsService
   ) {}
 
-  async searchGymsNearby(
+  async searchGymsByAddress(
     address: string,
-    radius = 1500
-  ): Promise<Partial<PlaceData>[]> {
+    radius = 5000
+  ): Promise<PlaceSearchResult[]> {
     const { lat, lng } = await this.mapsService.geocodeAddress(address);
     if (!lat || !lng) {
       throw new NotFoundException('Failed to geocode address');
@@ -30,6 +30,14 @@ export class GymsService {
 
     const gyms = await this.mapsService.nearbySearch(lat, lng, radius, 'gym');
     return gyms;
+  }
+
+  async searchGymsByCoordinates(
+    latitude: number,
+    longitude: number,
+    radius = 5000
+  ): Promise<PlaceSearchResult[]> {
+    return this.mapsService.nearbySearch(latitude, longitude, radius, 'gym');
   }
 
   async checkIn(
