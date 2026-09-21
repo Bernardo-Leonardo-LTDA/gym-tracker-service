@@ -1,6 +1,11 @@
-import { Client, PlaceData } from '@googlemaps/google-maps-services-js';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Client, GeocodeResponse } from '@googlemaps/google-maps-services-js';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import axios from 'axios';
+import { PlaceSearchResult, PlacesSearchResponse } from './maps.interface';
 
 @Injectable()
 export class MapsService {
@@ -13,35 +18,42 @@ export class MapsService {
   }
 
   async geocodeAddress(address: string): Promise<{ lat: number; lng: number }> {
+    let response: GeocodeResponse;
     try {
-      const response = await this.client.geocode({
+      response = await this.client.geocode({
         params: {
           address,
           key: this.apiKey,
         },
       });
-
-      const { lat, lng } = response.data.results[0].geometry.location;
-      return { lat, lng };
     } catch (error: unknown) {
       const err = error as Error;
       console.error('Error geocoding address:', err.message);
       throw new InternalServerErrorException('Failed to geocode address');
     }
+
+    const result = response.data.results[0];
+    if (!result) {
+      throw new NotFoundException('Address not found');
+    }
+
+    const { lat, lng } = result.geometry.location;
+    return { lat, lng };
   }
 
   async nearbySearch(
     lat: number,
     lng: number,
     radius: number,
-    type: string,
-  ): Promise<Partial<PlaceData>[]> {
+    type: string
+  ): Promise<PlaceSearchResult[]> {
     try {
-      const response: { data: Partial<PlaceData>[] } = await axios.post(
+      const response = await axios.post<PlacesSearchResponse>(
         'https://places.googleapis.com/v1/places:searchNearby',
         {
           includedTypes: [type],
           maxResultCount: 10,
+          rankPreference: 'DISTANCE',
           locationRestriction: {
             circle: {
               center: { latitude: lat, longitude: lng },
@@ -54,12 +66,12 @@ export class MapsService {
             'Content-Type': 'application/json',
             'X-Goog-Api-Key': this.apiKey,
             'X-Goog-FieldMask':
-              'places.id,places.displayName,places.formattedAddress,places.rating',
+              'places.id,places.displayName,places.formattedAddress,places.rating,places.location',
           },
-        },
+        }
       );
 
-      return response.data;
+      return response.data.places ?? [];
     } catch (error: unknown) {
       const err = error as Error;
       console.error('Error searching nearby places:', err.message);
