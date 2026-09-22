@@ -11,6 +11,15 @@ import { MapsService } from '../../shared/services/maps/maps.service';
 import { eq, and, count, inArray, lt } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 import { PlaceSearchResult } from '../../shared/services/maps/maps.interface';
+export type CheckedInUser = schema.User & {
+  checkedInAt: Date;
+};
+
+export type CheckInResult = schema.User & { checkedInAt: Date };
+export type ActiveCheckIn = {
+  gymId: string;
+  checkedInAt: Date;
+};
 
 @Injectable()
 export class GymsService {
@@ -43,7 +52,7 @@ export class GymsService {
   async checkIn(
     gymId: string,
     userInfo: { userId: string | null; name?: string }
-  ): Promise<schema.User> {
+  ): Promise<CheckInResult> {
     let user: schema.User;
 
     if (userInfo.userId) {
@@ -80,19 +89,20 @@ export class GymsService {
       throw new BadRequestException('User is already checked in');
     }
 
-    await this.db
+    const [checkin] = await this.db
       .insert(schema.checkins)
-      .values({ externalPlaceId: gymId, userId: user.id });
+      .values({ externalPlaceId: gymId, userId: user.id })
+      .returning({ createdAt: schema.checkins.createdAt });
 
     console.log(`User ${user.id} checked in to gym ${gymId}`);
 
-    return user;
+    return { ...user, checkedInAt: checkin.createdAt };
   }
 
   async fetchCheckedUsersInMyGym(
     gymId: string,
     userId: string
-  ): Promise<schema.User[]> {
+  ): Promise<CheckedInUser[]> {
     // check if user is checked in to the gym before fetching the list of checked-in users
     const userCheckedIn = await this.db.query.checkins.findFirst({
       where: and(
@@ -109,7 +119,7 @@ export class GymsService {
     }
 
     const checkedInUsers = await this.db
-      .select({ userId: schema.checkins.userId })
+      .select({ userId: schema.checkins.userId, checkedInAt: schema.checkins.createdAt })
       .from(schema.checkins)
       .where(
         and(
@@ -123,7 +133,31 @@ export class GymsService {
       where: (users, { inArray }) => inArray(users.id, userIds),
     });
 
-    return users;
+    const checkinsByUser = new Map(
+      checkedInUsers.map((checkin) => [checkin.userId, checkin.checkedInAt])
+    );
+    return users.map((user) => ({
+      ...user,
+      checkedInAt: checkinsByUser.get(user.id)!,
+    }));
+  }
+
+  async getActiveCheckIn(userId: string): Promise<ActiveCheckIn> {
+    const checkin = await this.db.query.checkins.findFirst({
+      where: and(
+        eq(schema.checkins.userId, userId),
+        eq(schema.checkins.isActive, true)
+      ),
+    });
+
+    if (!checkin) {
+      throw new NotFoundException('No active check-in found');
+    }
+
+    return {
+      gymId: checkin.externalPlaceId,
+      checkedInAt: checkin.createdAt,
+    };
   }
 
   async countCheckedInUsers(gymIds: string[]): Promise<Record<string, number>> {
