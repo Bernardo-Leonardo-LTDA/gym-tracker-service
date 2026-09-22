@@ -164,7 +164,9 @@ describe('GymsService', () => {
     it('should check in an existing user and return them', async () => {
       // arrange
       db.query.users.findFirst.mockResolvedValue(existingUser);
-      const insertValues = jest.fn().mockResolvedValue(undefined);
+      const insertValues = jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([{ createdAt: new Date() }]),
+      });
       db.insert.mockReturnValue({ values: insertValues });
 
       // act
@@ -173,7 +175,8 @@ describe('GymsService', () => {
       });
 
       // assert
-      expect(result).toEqual(existingUser);
+      expect(result).toMatchObject(existingUser);
+      expect(result.checkedInAt).toBeInstanceOf(Date);
       expect(db.insert).toHaveBeenCalledWith(schema.checkins);
       expect(insertValues).toHaveBeenCalledWith({
         externalPlaceId: 'gym-1',
@@ -202,7 +205,8 @@ describe('GymsService', () => {
       });
 
       // assert
-      expect(result).toEqual(createdUser);
+      expect(result).toMatchObject(createdUser);
+      expect(result.checkedInAt).toBeInstanceOf(Date);
       expect(db.insert).toHaveBeenCalledWith(schema.users);
       expect(insertValues).toHaveBeenCalledWith({ name: 'Jane Doe' });
       expect(db.insert).toHaveBeenCalledWith(schema.checkins);
@@ -247,7 +251,10 @@ describe('GymsService', () => {
         id: 'checkin-1',
         userId: existingUser.id,
       });
-      stubSelectWhere([{ userId: 'user-1' }, { userId: 'user-2' }]);
+      stubSelectWhere([
+        { userId: 'user-1', checkedInAt: new Date() },
+        { userId: 'user-2', checkedInAt: new Date() },
+      ]);
       const users = [
         existingUser,
         { ...existingUser, id: 'user-2', name: 'Bob' },
@@ -259,7 +266,9 @@ describe('GymsService', () => {
 
       // assert
       expect(db.query.checkins.findFirst).toHaveBeenCalled();
-      expect(result).toEqual(users);
+      expect(result).toHaveLength(users.length);
+      expect(result[0]).toMatchObject(users[0]);
+      expect(result[0].checkedInAt).toBeInstanceOf(Date);
     });
   });
 
@@ -323,6 +332,29 @@ describe('GymsService', () => {
       // act & assert
       await expect(service.checkOut(existingUser.id)).rejects.toThrow(
         BadRequestException
+      );
+    });
+  });
+
+  describe('getActiveCheckIn', () => {
+    it('returns the active gym and its check-in time', async () => {
+      const createdAt = new Date('2026-09-22T00:00:00Z');
+      db.query.checkins.findFirst.mockResolvedValue({
+        externalPlaceId: 'place-1',
+        createdAt,
+      });
+
+      await expect(service.getActiveCheckIn(existingUser.id)).resolves.toEqual({
+        gymId: 'place-1',
+        checkedInAt: createdAt,
+      });
+    });
+
+    it('rejects when the user is not checked in', async () => {
+      db.query.checkins.findFirst.mockResolvedValue(undefined);
+
+      await expect(service.getActiveCheckIn(existingUser.id)).rejects.toThrow(
+        NotFoundException
       );
     });
   });

@@ -9,7 +9,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { GymsService } from './gyms.service';
-import { User } from '../../core/database/schema';
 import {
   Coordinates,
   PlaceSearchResult,
@@ -54,12 +53,19 @@ export class GymsController {
   async fetchCheckedUsersInMyGym(
     @Query('gymId') gymId: string,
     @Query('userId', ParseUUIDPipe) userId: string
-  ): Promise<User[]> {
+  ) {
     const response = await this.gymsService.fetchCheckedUsersInMyGym(
       gymId,
       userId
     );
     return response;
+  }
+
+  @Get('active')
+  async getActiveCheckIn(
+    @Query('userId', ParseUUIDPipe) userId: string
+  ) {
+    return this.gymsService.getActiveCheckIn(userId);
   }
 
   @Post('checked-users/counts')
@@ -72,10 +78,13 @@ export class GymsController {
   @Post('check-in')
   async checkIn(
     @Body('gymId') gymId: string,
-    @Body('userId', ParseUUIDPipe) userId: string | null,
+    @Body('userId') userId: string | null | undefined,
     @Body('userName') name?: string
-  ): Promise<User> {
-    const userInfo = { userId, name };
+  ) {
+    if (userId !== undefined && userId !== null) {
+      new ParseUUIDPipe().transform(userId, { type: 'body' });
+    }
+    const userInfo = { userId: userId ?? null, name: name?.trim() };
     return this.gymsService.checkIn(gymId, userInfo);
   }
 
