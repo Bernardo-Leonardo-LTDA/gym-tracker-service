@@ -105,12 +105,8 @@ export class GymsEventsService implements OnModuleInit, OnModuleDestroy {
     try {
       do {
         viewer.dirty = false;
-        const users = await this.gyms.fetchCheckedUsersInMyGym(
+        const { users, status } = await this.gyms.snapshot(
           viewer.gymId,
-          viewer.userId,
-          viewer.authorization
-        );
-        const status = await this.gyms.musicStatus(
           viewer.userId,
           viewer.authorization
         );

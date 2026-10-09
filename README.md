@@ -47,7 +47,9 @@ recommended when opening multiple tabs (HTTP/1.1 limits per-origin connections).
 The client sends its credential in a header, never in the stream URL.
 
 Spotify refresh tokens are not retained yet. When an access token expires, the
-user must disconnect and connect Spotify again. Restarting the backend also clears
+status changes to `reconnect-required`, polling stops, and the user must connect
+Spotify again. Spotify token errors on `/gyms/music/*` return 400 (with
+`reason`) or 502, never 401/403, which are reserved for the check-in session. Restarting the backend also clears
 Spotify connections; the database check-in remains active, but music sharing must
 be connected again.
 

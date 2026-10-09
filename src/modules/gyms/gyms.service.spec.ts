@@ -21,6 +21,8 @@ jest.mock('drizzle-orm', () => {
     lt: jest.fn(actual.lt),
     inArray: actual.inArray,
     gt: actual.gt,
+    lte: actual.lte,
+    sql: actual.sql,
   };
 });
 
@@ -243,6 +245,25 @@ describe('GymsService', () => {
       );
     });
 
+    it('reports a concurrent duplicate check-in as already checked in', async () => {
+      db.query.users.findFirst.mockResolvedValue(existingUser);
+      db.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          returning: jest
+            .fn()
+            .mockRejectedValue(
+              Object.assign(new Error('Failed query'), {
+                cause: { code: '23505' },
+              })
+            ),
+        }),
+      });
+
+      await expect(
+        service.checkIn('gym-1', { userId: existingUser.id })
+      ).rejects.toThrow('User is already checked in');
+    });
+
     it('should throw when the user is already checked in', async () => {
       // arrange
       db.query.users.findFirst.mockResolvedValue(existingUser);
@@ -401,6 +422,17 @@ describe('GymsService', () => {
         gymId: 'place-1',
         checkedInAt: createdAt,
       });
+    });
+
+    it('accepts a session token sent in uppercase', async () => {
+      db.query.checkins.findFirst.mockResolvedValue(activeSession());
+
+      await expect(
+        service.getActiveCheckIn(
+          existingUser.id,
+          `Bearer ${sessionToken.toUpperCase()}`
+        )
+      ).resolves.toMatchObject({ gymId: 'gym-1' });
     });
 
     it('rejects when the user is not checked in', async () => {

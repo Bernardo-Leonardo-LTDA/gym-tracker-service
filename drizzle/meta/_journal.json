@@ -29,6 +29,13 @@
       "when": 1791487087070,
       "tag": "0003_remove_legacy_music_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791508334588,
+      "tag": "0004_one_active_checkin_per_user",
+      "breakpoints": true
     }
   ]
 }

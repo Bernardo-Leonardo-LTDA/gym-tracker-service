@@ -1,4 +1,10 @@
-import { Controller, Headers, Query, Sse } from '@nestjs/common';
+import {
+  Controller,
+  Headers,
+  ParseUUIDPipe,
+  Query,
+  Sse,
+} from '@nestjs/common';
 import { GymsEventsService } from './gyms-events.service';
 
 @Controller('gyms')
@@ -7,7 +13,7 @@ export class GymsEventsController {
 
   @Sse('events')
   stream(
-    @Query('userId') userId: string,
+    @Query('userId', ParseUUIDPipe) userId: string,
     @Headers('authorization') authorization?: string
   ) {
     return this.events.open(userId, authorization);

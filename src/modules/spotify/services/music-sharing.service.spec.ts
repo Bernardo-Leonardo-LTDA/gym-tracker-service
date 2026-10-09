@@ -100,6 +100,40 @@ describe('MusicSharingService', () => {
     });
   });
 
+  it('asks for reconnection and stops polling once the Spotify token expires', async () => {
+    provider.read
+      .mockResolvedValueOnce({ title: 'Song', artist: 'Artist' })
+      .mockRejectedValueOnce(new HttpException('Unauthorized', 401));
+    await service.connect('user-1', 'spotify', 'secret-token', session());
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(service.getStatus('user-1')).toMatchObject({
+      state: 'reconnect-required',
+      music: null,
+    });
+    await jest.advanceTimersByTimeAsync(90_000);
+    expect(provider.read).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not report a rejected Spotify token as a 401 on gym routes', async () => {
+    provider.read.mockRejectedValueOnce(new HttpException('Unauthorized', 401));
+    await expect(
+      service.connect('user-1', 'spotify', 'secret-token', session())
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('publishes refreshes only when the shared track changes', async () => {
+    provider.read.mockResolvedValue({ title: 'Song', artist: 'Artist' });
+    await service.connect('user-1', 'spotify', 'secret-token', session());
+    const changes = jest.fn();
+    service.changes.subscribe(changes);
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(changes).not.toHaveBeenCalled();
+    expect(service.getStatus('user-1').state).toBe('playing');
+    provider.read.mockResolvedValue({ title: 'Next', artist: 'Artist' });
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(changes).toHaveBeenCalledTimes(1);
+  });
+
   it('does not revive a disconnected track after an in-flight refresh', async () => {
     let finish!: (value: { title: string; artist: string }) => void;
     provider.read

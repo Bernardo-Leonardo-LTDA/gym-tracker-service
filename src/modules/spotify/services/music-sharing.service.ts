@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   HttpException,
   Injectable,
@@ -15,6 +16,7 @@ import { SpotifyMusicProvider } from './spotify-music.provider';
 import { Subject } from 'rxjs';
 
 const MAX_TRACK_AGE_MS = 90_000;
+type MusicFailure = 'unavailable' | 'permission-denied' | 'reconnect-required';
 export interface MusicCheckInSession {
   checkInId: string;
   expiresAt: number;
@@ -26,7 +28,7 @@ interface Connection extends MusicCheckInSession {
   enabled: boolean;
   checkedAt: number;
   music: MusicTrack | null;
-  failure: 'unavailable' | 'permission-denied' | null;
+  failure: MusicFailure | null;
   revision: number;
 }
 
@@ -80,7 +82,7 @@ export class MusicSharingService implements OnModuleInit, OnModuleDestroy {
     this.connectAttempts.set(userId, { attempt, session });
     let playback: { title: string; artist: string } | null;
     try {
-      playback = await provider.read(accessToken);
+      playback = await this.readForRequest(provider, accessToken);
     } catch (error) {
       if (this.connectAttempts.get(userId)?.attempt === attempt)
         this.connectAttempts.delete(userId);
@@ -122,7 +124,10 @@ export class MusicSharingService implements OnModuleInit, OnModuleDestroy {
     connection.music = null;
     this.changes.next(userId);
     // Keep sharing off if the provider is unavailable or its token has expired.
-    const playback = await connection.provider.read(connection.accessToken);
+    const playback = await this.readForRequest(
+      connection.provider,
+      connection.accessToken
+    );
     if (
       this.connections.get(userId) !== connection ||
       connection.revision !== revision ||
@@ -240,7 +245,12 @@ export class MusicSharingService implements OnModuleInit, OnModuleDestroy {
 
   private async refresh(userId: string): Promise<void> {
     const connection = this.getConnection(userId);
-    if (!connection?.enabled || this.refreshing.has(userId)) return;
+    if (
+      !connection?.enabled ||
+      connection.failure === 'reconnect-required' ||
+      this.refreshing.has(userId)
+    )
+      return;
     const revision = connection.revision;
     this.refreshing.add(userId);
     try {
@@ -253,11 +263,17 @@ export class MusicSharingService implements OnModuleInit, OnModuleDestroy {
       )
         return;
       const now = Date.now();
+      const changed =
+        connection.failure !== null ||
+        connection.music?.title !== playback?.title ||
+        connection.music?.artist !== playback?.artist;
       connection.checkedAt = now;
+      connection.failure = null;
+      // An unchanged track needs no broadcast; viewers already have it.
+      if (!changed) return;
       connection.music = playback
         ? this.asTrack(connection.provider, playback, now)
         : null;
-      connection.failure = null;
       this.changes.next(userId);
     } catch (error) {
       if (
@@ -266,15 +282,43 @@ export class MusicSharingService implements OnModuleInit, OnModuleDestroy {
         connection.revision === revision &&
         this.sessionIsActive(connection)
       ) {
+        const failure = this.failureFor(error);
+        const changed =
+          connection.failure !== failure || connection.music !== null;
         connection.music = null;
-        connection.failure =
-          error instanceof HttpException && error.getStatus() === 403
-            ? 'permission-denied'
-            : 'unavailable';
-        this.changes.next(userId);
+        connection.failure = failure;
+        if (changed) this.changes.next(userId);
       }
     } finally {
       this.refreshing.delete(userId);
+    }
+  }
+
+  private failureFor(error: unknown): MusicFailure {
+    if (!(error instanceof HttpException)) return 'unavailable';
+    // Spotify answers 401 once the access token expires. Refresh tokens are not
+    // kept, so polling cannot recover until the user connects again.
+    if (error.getStatus() === 401) return 'reconnect-required';
+    if (error.getStatus() === 403) return 'permission-denied';
+    return 'unavailable';
+  }
+
+  // Provider auth failures must not reach clients as 401/403: on check-in
+  // routes those statuses mean the check-in session itself was rejected.
+  private async readForRequest(
+    provider: MusicProvider,
+    accessToken: string
+  ): Promise<{ title: string; artist: string } | null> {
+    try {
+      return await provider.read(accessToken);
+    } catch (error) {
+      const failure = this.failureFor(error);
+      if (failure === 'unavailable')
+        throw new BadGatewayException('Music provider is unavailable');
+      throw new BadRequestException({
+        message: 'Music provider rejected the access token',
+        reason: failure,
+      });
     }
   }
 

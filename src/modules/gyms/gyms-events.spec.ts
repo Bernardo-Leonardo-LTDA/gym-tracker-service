@@ -9,6 +9,10 @@ import { GymsEventsController } from './gyms-events.controller';
 import { CHECK_IN_DURATION_MS, GymsService } from './gyms.service';
 import { MusicSharingService } from '../spotify/services/music-sharing.service';
 
+const ALICE = '0a11ce00-0000-4000-8000-000000000001';
+const BOB = '0b0b0000-0000-4000-8000-000000000002';
+const CAROL = '0ca10100-0000-4000-8000-000000000003';
+
 interface TestClient extends EventEmitter {
   connect: () => void;
   disconnect: () => void;
@@ -99,12 +103,12 @@ describe('Live gym updates (SSE)', () => {
     sessions = new Map([
       [
         'a',
-        { userId: 'alice', externalPlaceId: 'gym-1', createdAt: new Date() },
+        { userId: ALICE, externalPlaceId: 'gym-1', createdAt: new Date() },
       ],
-      ['b', { userId: 'bob', externalPlaceId: 'gym-1', createdAt: new Date() }],
+      ['b', { userId: BOB, externalPlaceId: 'gym-1', createdAt: new Date() }],
       [
         'c',
-        { userId: 'carol', externalPlaceId: 'gym-2', createdAt: new Date() },
+        { userId: CAROL, externalPlaceId: 'gym-2', createdAt: new Date() },
       ],
     ]);
     const authorize = (userId: string, authorization: string) => {
@@ -128,14 +132,14 @@ describe('Live gym updates (SSE)', () => {
                 [...sessions.values()].find((s) => s.userId === userId)
                   ?.externalPlaceId
               ),
-            fetchCheckedUsersInMyGym: (
+            snapshot: (
               gymId: string,
               userId: string,
               authorization: string
             ) => {
               authorize(userId, authorization);
-              return Promise.resolve(
-                [...sessions.values()]
+              return Promise.resolve({
+                users: [...sessions.values()]
                   .filter(
                     (s) =>
                       s.externalPlaceId === gymId &&
@@ -143,15 +147,10 @@ describe('Live gym updates (SSE)', () => {
                   )
                   .map((s) => ({
                     id: s.userId,
-                    music: s.userId === 'alice' ? track : null,
+                    music: s.userId === ALICE ? track : null,
                     checkedInAt: s.createdAt,
-                  }))
-              );
-            },
-            musicStatus: (userId: string, authorization: string) => {
-              authorize(userId, authorization);
-              return Promise.resolve({
-                music: userId === 'alice' ? track : null,
+                  })),
+                status: { music: userId === ALICE ? track : null },
               });
             },
           },
@@ -170,7 +169,7 @@ describe('Live gym updates (SSE)', () => {
   });
 
   it('rejects credentials belonging to another user without delivering a snapshot', async () => {
-    const socket = client('alice', 'b');
+    const socket = client(ALICE, 'b');
     const snapshot = jest.fn();
     socket.on('snapshot', snapshot);
     const ended = next(socket, 'session-ended');
@@ -181,14 +180,14 @@ describe('Live gym updates (SSE)', () => {
   });
 
   it('pushes check-ins and music only to viewers of the same gym', async () => {
-    const bob = client('bob', 'b');
-    const carol = client('carol', 'c');
+    const bob = client(BOB, 'b');
+    const carol = client(CAROL, 'c');
     const firstBob = next<Snapshot>(bob, 'snapshot');
     const firstCarol = next<Snapshot>(carol, 'snapshot');
     bob.connect();
     carol.connect();
-    expect((await firstBob).users.map((u) => u.id)).toEqual(['alice', 'bob']);
-    expect((await firstCarol).users.map((u) => u.id)).toEqual(['carol']);
+    expect((await firstBob).users.map((u) => u.id)).toEqual([ALICE, BOB]);
+    expect((await firstCarol).users.map((u) => u.id)).toEqual([CAROL]);
     const otherGym = jest.fn();
     carol.on('snapshot', otherGym);
     const arrival = next<Snapshot>(bob, 'snapshot');
@@ -201,17 +200,17 @@ describe('Live gym updates (SSE)', () => {
     expect((await arrival).users.map((u) => u.id)).toContain('dan');
     const playback = next<Snapshot>(bob, 'snapshot');
     track = { title: 'Outro', artist: 'M83', isPlaying: true };
-    musicChanges.next('alice');
+    musicChanges.next(ALICE);
     const snapshot = await playback;
-    expect(snapshot.users.find((u) => u.id === 'alice')?.music).toEqual(track);
+    expect(snapshot.users.find((u) => u.id === ALICE)?.music).toEqual(track);
     expect(snapshot.status.music).toBeNull();
     expect(otherGym).not.toHaveBeenCalled();
     expect(JSON.stringify(snapshot)).not.toContain('sessionToken');
   });
 
   it('revokes a checked-out viewer and sends departures to remaining viewers', async () => {
-    const alice = client('alice', 'a');
-    const bob = client('bob', 'b');
+    const alice = client(ALICE, 'a');
+    const bob = client(BOB, 'b');
     const initial = [next(alice, 'snapshot'), next(bob, 'snapshot')];
     alice.connect();
     bob.connect();
@@ -221,23 +220,23 @@ describe('Live gym updates (SSE)', () => {
     sessions.delete('a');
     changes.next('gym-1');
     await ended;
-    expect((await departure).users.map((u) => u.id)).toEqual(['bob']);
+    expect((await departure).users.map((u) => u.id)).toEqual([BOB]);
   });
 
   it('pushes expiry of an attendee even when that attendee has no connected browser', async () => {
     sessions.get('a')!.createdAt = new Date(
       Date.now() - CHECK_IN_DURATION_MS + 300
     );
-    const bob = client('bob', 'b');
+    const bob = client(BOB, 'b');
     const initial = next<Snapshot>(bob, 'snapshot');
     bob.connect();
-    expect((await initial).users.map((user) => user.id)).toContain('alice');
+    expect((await initial).users.map((user) => user.id)).toContain(ALICE);
     const expired = await next<Snapshot>(bob, 'snapshot');
-    expect(expired.users.map((user) => user.id)).toEqual(['bob']);
+    expect(expired.users.map((user) => user.id)).toEqual([BOB]);
   });
 
   it('resends the current snapshot on reconnect and expires the connection at the session deadline', async () => {
-    const bob = client('bob', 'b');
+    const bob = client(BOB, 'b');
     const initial = next(bob, 'snapshot');
     bob.connect();
     await initial;
@@ -248,7 +247,7 @@ describe('Live gym updates (SSE)', () => {
     const resumed = next<Snapshot>(bob, 'snapshot');
     const ended = next(bob, 'session-ended');
     bob.connect();
-    expect((await resumed).users.map((u) => u.id)).toContain('alice');
+    expect((await resumed).users.map((u) => u.id)).toContain(ALICE);
     await ended;
   });
 });

@@ -10,7 +10,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../core/database/schema';
 import { DRIZZLE_PROVIDER } from '../../core/database/database.provider';
 import { MapsService } from '../../shared/services/maps/maps.service';
-import { eq, and, count, inArray, lt, gt } from 'drizzle-orm';
+import { eq, and, count, inArray, lt, gt, lte } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 import { Subject } from 'rxjs';
 import { PlaceSearchResult } from '../../shared/services/maps/maps.interface';
@@ -34,29 +34,43 @@ export type ActiveCheckIn = {
   gymId: string;
   checkedInAt: Date;
 };
+export type GymSnapshot = {
+  users: CheckedInUser[];
+  status: MusicSharingStatus;
+};
+
+const isUniqueViolation = (error: unknown): boolean => {
+  // drizzle wraps driver errors; postgres-js exposes the SQLSTATE as `code`.
+  const code = (e: unknown) => (e as { code?: unknown } | null)?.code;
+  return (
+    code(error) === '23505' ||
+    code((error as { cause?: unknown } | null)?.cause) === '23505'
+  );
+};
+
+// Check-ins count as live while flagged active and within the check-in window.
+const liveCheckin = () =>
+  and(
+    eq(schema.checkins.isActive, true),
+    gt(schema.checkins.createdAt, new Date(Date.now() - CHECK_IN_DURATION_MS))
+  );
 
 @Injectable()
 export class GymsService {
   readonly changes = new Subject<string>();
 
-  async activeGymForUser(userId: string): Promise<string | undefined> {
-    const checkin = await this.db.query.checkins.findFirst({
-      where: and(
-        eq(schema.checkins.userId, userId),
-        eq(schema.checkins.isActive, true),
-        gt(
-          schema.checkins.createdAt,
-          new Date(Date.now() - CHECK_IN_DURATION_MS)
-        )
-      ),
-    });
-    return checkin?.externalPlaceId;
-  }
   constructor(
     @Inject(DRIZZLE_PROVIDER) private db: PostgresJsDatabase<typeof schema>,
     private mapsService: MapsService,
     private readonly musicSharing: MusicSharingService
   ) {}
+
+  async activeGymForUser(userId: string): Promise<string | undefined> {
+    const checkin = await this.db.query.checkins.findFirst({
+      where: and(eq(schema.checkins.userId, userId), liveCheckin()),
+    });
+    return checkin?.externalPlaceId;
+  }
 
   async searchGymsByAddress(
     address: string,
@@ -109,27 +123,44 @@ export class GymsService {
     }
 
     const activeCheckin = await this.db.query.checkins.findFirst({
-      where: and(
-        eq(schema.checkins.userId, user.id),
-        eq(schema.checkins.isActive, true),
-        gt(
-          schema.checkins.createdAt,
-          new Date(Date.now() - CHECK_IN_DURATION_MS)
-        )
-      ),
+      where: and(eq(schema.checkins.userId, user.id), liveCheckin()),
     });
 
     if (activeCheckin) {
       throw new BadRequestException('User is already checked in');
     }
 
-    const [checkin] = await this.db
-      .insert(schema.checkins)
-      .values({ externalPlaceId: gymId, userId: user.id })
-      .returning({
-        id: schema.checkins.id,
-        createdAt: schema.checkins.createdAt,
-      });
+    // Expired rows the cleanup job has not reached yet would otherwise collide
+    // with the one-active-check-in-per-user index.
+    await this.db
+      .update(schema.checkins)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(schema.checkins.userId, user.id),
+          eq(schema.checkins.isActive, true),
+          lte(
+            schema.checkins.createdAt,
+            new Date(Date.now() - CHECK_IN_DURATION_MS)
+          )
+        )
+      );
+
+    let checkin: { id: string; createdAt: Date };
+    try {
+      [checkin] = await this.db
+        .insert(schema.checkins)
+        .values({ externalPlaceId: gymId, userId: user.id })
+        .returning({
+          id: schema.checkins.id,
+          createdAt: schema.checkins.createdAt,
+        });
+    } catch (error) {
+      // A concurrent check-in for the same user won the unique index race.
+      if (isUniqueViolation(error))
+        throw new BadRequestException('User is already checked in');
+      throw error;
+    }
 
     this.musicSharing.disconnect(user.id);
     this.changes.next(gymId);
@@ -151,6 +182,24 @@ export class GymsService {
     authorization?: string
   ): Promise<CheckedInUser[]> {
     const session = await this.requireSession(userId, authorization);
+    return this.listAttendees(session, gymId);
+  }
+
+  // Validates the session once for both the attendee list and the viewer's status.
+  async snapshot(
+    gymId: string,
+    userId: string,
+    authorization?: string
+  ): Promise<GymSnapshot> {
+    const session = await this.requireSession(userId, authorization);
+    const users = await this.listAttendees(session, gymId);
+    return { users, status: this.musicSharing.getStatus(userId, session.id) };
+  }
+
+  private async listAttendees(
+    session: schema.CheckIn,
+    gymId: string
+  ): Promise<CheckedInUser[]> {
     if (session.externalPlaceId !== gymId)
       throw new ForbiddenException('Check-in session belongs to another gym');
     const checkedInUsers = await this.db
@@ -160,16 +209,7 @@ export class GymsService {
         checkedInAt: schema.checkins.createdAt,
       })
       .from(schema.checkins)
-      .where(
-        and(
-          eq(schema.checkins.externalPlaceId, gymId),
-          eq(schema.checkins.isActive, true),
-          gt(
-            schema.checkins.createdAt,
-            new Date(Date.now() - CHECK_IN_DURATION_MS)
-          )
-        )
-      );
+      .where(and(eq(schema.checkins.externalPlaceId, gymId), liveCheckin()));
 
     const userIds = checkedInUsers.map((checkin) => checkin.userId);
     const users = await this.db.query.users.findMany({
@@ -253,7 +293,9 @@ export class GymsService {
     const token =
       /^Bearer ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
         authorization ?? ''
-      )?.[1];
+      )?.[1]
+        // Postgres returns uuids in lowercase; normalize before comparing.
+        ?.toLowerCase();
     if (!token)
       throw new UnauthorizedException(
         'A private check-in session token is required'
@@ -261,7 +303,7 @@ export class GymsService {
     const checkin = await this.db.query.checkins.findFirst({
       where: eq(schema.checkins.id, token),
     });
-    if (!checkin || checkin.id !== token || !checkin.isActive) {
+    if (!checkin || !checkin.isActive) {
       throw new UnauthorizedException('Check-in session is no longer active');
     }
     if (checkin.userId !== userId)
@@ -289,11 +331,7 @@ export class GymsService {
       .where(
         and(
           inArray(schema.checkins.externalPlaceId, uniqueGymIds),
-          eq(schema.checkins.isActive, true),
-          gt(
-            schema.checkins.createdAt,
-            new Date(Date.now() - CHECK_IN_DURATION_MS)
-          )
+          liveCheckin()
         )
       )
       .groupBy(schema.checkins.externalPlaceId);
@@ -325,9 +363,9 @@ export class GymsService {
 
   @Cron('0 */12 * * *') // Runs every 12 hours
   async cleanupInactiveCheckins(): Promise<void> {
-    // get all checkins that are active and older than 12 hours
+    // get all checkins that are active and older than the check-in window
     console.log('[ROUTINE]: Cleaning up inactive check-ins...');
-    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const twelveHoursAgo = new Date(Date.now() - CHECK_IN_DURATION_MS);
     try {
       const expired = await this.db
         .update(schema.checkins)
