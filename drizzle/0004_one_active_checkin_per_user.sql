@@ -1,0 +1,2 @@
+UPDATE "checkins" SET "is_active" = false WHERE "is_active" AND "id" NOT IN (SELECT DISTINCT ON ("user_id") "id" FROM "checkins" WHERE "is_active" ORDER BY "user_id", "created_at" DESC);--> statement-breakpoint
+CREATE UNIQUE INDEX "checkins_one_active_per_user" ON "checkins" USING btree ("user_id") WHERE "checkins"."is_active";

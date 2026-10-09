@@ -2,19 +2,17 @@ interface SpotifyArtist {
   name: string;
 }
 
-interface SpotifyAlbum {
-  name: string;
-}
-
 interface SpotifyTrackItem {
   name: string;
-  duration_ms: number;
   artists: SpotifyArtist[];
-  album: SpotifyAlbum;
 }
 
 export interface SpotifyCurrentlyPlaying {
   is_playing: boolean;
-  progress_ms: number;
   item: SpotifyTrackItem | null;
+}
+export interface SpotifyTrack {
+  artist?: string;
+  isPlaying: boolean;
+  trackName?: string;
 }

@@ -4,11 +4,13 @@ import {
   Controller,
   Get,
   HttpCode,
+  Headers,
   ParseUUIDPipe,
   Post,
   Query,
 } from '@nestjs/common';
 import { GymsService } from './gyms.service';
+import type { MusicProviderId } from '../spotify/interfaces/music-sharing.interface';
 import {
   Coordinates,
   PlaceSearchResult,
@@ -52,20 +54,23 @@ export class GymsController {
   @Get('checked-users')
   async fetchCheckedUsersInMyGym(
     @Query('gymId') gymId: string,
-    @Query('userId', ParseUUIDPipe) userId: string
+    @Query('userId', ParseUUIDPipe) userId: string,
+    @Headers('authorization') authorization?: string
   ) {
     const response = await this.gymsService.fetchCheckedUsersInMyGym(
       gymId,
-      userId
+      userId,
+      authorization
     );
     return response;
   }
 
   @Get('active')
   async getActiveCheckIn(
-    @Query('userId', ParseUUIDPipe) userId: string
+    @Query('userId', ParseUUIDPipe) userId: string,
+    @Headers('authorization') authorization?: string
   ) {
-    return this.gymsService.getActiveCheckIn(userId);
+    return this.gymsService.getActiveCheckIn(userId, authorization);
   }
 
   @Post('checked-users/counts')
@@ -82,7 +87,7 @@ export class GymsController {
     @Body('userName') name?: string
   ) {
     if (userId !== undefined && userId !== null) {
-      new ParseUUIDPipe().transform(userId, { type: 'body' });
+      await new ParseUUIDPipe().transform(userId, { type: 'body' });
     }
     const userInfo = { userId: userId ?? null, name: name?.trim() };
     return this.gymsService.checkIn(gymId, userInfo);
@@ -90,8 +95,58 @@ export class GymsController {
 
   @Post('check-out')
   @HttpCode(204)
-  async checkOut(@Body('userId', ParseUUIDPipe) userId: string): Promise<void> {
-    await this.gymsService.checkOut(userId);
+  async checkOut(
+    @Body('userId', ParseUUIDPipe) userId: string,
+    @Headers('authorization') authorization?: string
+  ): Promise<void> {
+    await this.gymsService.checkOut(userId, authorization);
+  }
+
+  @Get('music/status')
+  musicStatus(
+    @Query('userId', ParseUUIDPipe) userId: string,
+    @Headers('authorization') authorization?: string
+  ) {
+    return this.gymsService.musicStatus(userId, authorization);
+  }
+
+  @Post('music/connect')
+  connectMusic(
+    @Body('userId', ParseUUIDPipe) userId: string,
+    @Body('provider') provider: MusicProviderId,
+    @Body('accessToken') accessToken: string,
+    @Headers('authorization') authorization?: string
+  ) {
+    return this.gymsService.connectMusic(
+      userId,
+      provider,
+      accessToken,
+      authorization
+    );
+  }
+
+  @Post('music/resume')
+  resumeMusic(
+    @Body('userId', ParseUUIDPipe) userId: string,
+    @Headers('authorization') authorization?: string
+  ) {
+    return this.gymsService.resumeMusic(userId, authorization);
+  }
+
+  @Post('music/disable')
+  disableMusic(
+    @Body('userId', ParseUUIDPipe) userId: string,
+    @Headers('authorization') authorization?: string
+  ) {
+    return this.gymsService.disableMusic(userId, authorization);
+  }
+
+  @Post('music/disconnect')
+  disconnectMusic(
+    @Body('userId', ParseUUIDPipe) userId: string,
+    @Headers('authorization') authorization?: string
+  ) {
+    return this.gymsService.disconnectMusic(userId, authorization);
   }
 
   private parseRequiredCoordinates(

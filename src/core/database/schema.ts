@@ -1,35 +1,43 @@
-import { pgTable, uuid, varchar, timestamp, boolean } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  timestamp,
+  boolean,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
-// Users table (Save current music state)
+// Users table
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 255 }).notNull(),
   avatarUrl: varchar('avatar_url', { length: 255 }),
 
-  // --- Real Time (Music) ---
-  currentSongTitle: varchar('current_song_title', { length: 255 }),
-  currentSongArtist: varchar('current_song_artist', { length: 255 }),
-  currentSongExternalId: varchar('current_song_external_id', { length: 255 }),
-  currentSongUpdatedAt: timestamp('current_song_updated_at'),
-
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 // Check-ins table
-export const checkins = pgTable('checkins', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .references(() => users.id, { onDelete: 'cascade' })
-    .notNull(),
-  externalPlaceId: varchar('external_place_id', { length: 255 }).notNull(),
-  isActive: boolean('is_active').default(true).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const checkins = pgTable(
+  'checkins',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    externalPlaceId: varchar('external_place_id', { length: 255 }).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  // At most one active check-in (and session token) per user.
+  (table) => [
+    uniqueIndex('checkins_one_active_per_user')
+      .on(table.userId)
+      .where(sql`${table.isActive}`),
+  ]
+);
 
 export type User = typeof users.$inferSelect;
 export type CheckIn = typeof checkins.$inferSelect;
-
-export type NewUser = typeof users.$inferInsert;
-export type NewCheckIn = typeof checkins.$inferInsert;
