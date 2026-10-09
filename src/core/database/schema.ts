@@ -1,16 +1,16 @@
-import { pgTable, uuid, varchar, timestamp, boolean } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  timestamp,
+  boolean,
+} from 'drizzle-orm/pg-core';
 
-// Users table (Save current music state)
+// Users table
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 255 }).notNull(),
   avatarUrl: varchar('avatar_url', { length: 255 }),
-
-  // --- Real Time (Music) ---
-  currentSongTitle: varchar('current_song_title', { length: 255 }),
-  currentSongArtist: varchar('current_song_artist', { length: 255 }),
-  currentSongExternalId: varchar('current_song_external_id', { length: 255 }),
-  currentSongUpdatedAt: timestamp('current_song_updated_at'),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -30,6 +30,3 @@ export const checkins = pgTable('checkins', {
 
 export type User = typeof users.$inferSelect;
 export type CheckIn = typeof checkins.$inferSelect;
-
-export type NewUser = typeof users.$inferInsert;
-export type NewCheckIn = typeof checkins.$inferInsert;

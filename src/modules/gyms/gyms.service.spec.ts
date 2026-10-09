@@ -1,10 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { GymsService } from './gyms.service';
 import { MapsService } from '../../shared/services/maps/maps.service';
 import { DRIZZLE_PROVIDER } from '../../core/database/database.provider';
 import * as schema from '../../core/database/schema';
 import { lt } from 'drizzle-orm';
+import { MusicSharingService } from '../spotify/services/music-sharing.service';
 
 jest.mock('drizzle-orm', () => {
   const actual =
@@ -15,6 +20,7 @@ jest.mock('drizzle-orm', () => {
     count: actual.count,
     lt: jest.fn(actual.lt),
     inArray: actual.inArray,
+    gt: actual.gt,
   };
 });
 
@@ -41,15 +47,29 @@ describe('GymsService', () => {
   let service: GymsService;
   let db: DbMock;
   let maps: MapsMock;
+  const musicSharing = {
+    getPresence: jest.fn().mockReturnValue(null),
+    disconnect: jest.fn(),
+    connect: jest.fn(),
+    resume: jest.fn(),
+    getStatus: jest.fn(),
+    disable: jest.fn(),
+    expireCheckIn: jest.fn(),
+  };
+  const sessionToken = '11111111-1111-4111-8111-111111111111';
+  const authorization = `Bearer ${sessionToken}`;
+  const activeSession = () => ({
+    id: sessionToken,
+    userId: 'user-1',
+    externalPlaceId: 'gym-1',
+    isActive: true,
+    createdAt: new Date(),
+  });
 
   const existingUser: schema.User = {
     id: 'user-1',
     name: 'John Doe',
     avatarUrl: null,
-    currentSongTitle: null,
-    currentSongArtist: null,
-    currentSongExternalId: null,
-    currentSongUpdatedAt: null,
     createdAt: new Date(),
   };
 
@@ -106,6 +126,7 @@ describe('GymsService', () => {
         GymsService,
         { provide: MapsService, useValue: maps },
         { provide: DRIZZLE_PROVIDER, useValue: db },
+        { provide: MusicSharingService, useValue: musicSharing },
       ],
     }).compile();
 
@@ -165,7 +186,9 @@ describe('GymsService', () => {
       // arrange
       db.query.users.findFirst.mockResolvedValue(existingUser);
       const insertValues = jest.fn().mockReturnValue({
-        returning: jest.fn().mockResolvedValue([{ createdAt: new Date() }]),
+        returning: jest
+          .fn()
+          .mockResolvedValue([{ id: sessionToken, createdAt: new Date() }]),
       });
       db.insert.mockReturnValue({ values: insertValues });
 
@@ -177,6 +200,7 @@ describe('GymsService', () => {
       // assert
       expect(result).toMatchObject(existingUser);
       expect(result.checkedInAt).toBeInstanceOf(Date);
+      expect(result.sessionToken).toBe(sessionToken);
       expect(db.insert).toHaveBeenCalledWith(schema.checkins);
       expect(insertValues).toHaveBeenCalledWith({
         externalPlaceId: 'gym-1',
@@ -241,34 +265,58 @@ describe('GymsService', () => {
 
       // act & assert
       await expect(
-        service.fetchCheckedUsersInMyGym('gym-1', 'user-1')
-      ).rejects.toThrow(BadRequestException);
+        service.fetchCheckedUsersInMyGym('gym-1', 'user-1', authorization)
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should return the users checked into the gym', async () => {
       // arrange
-      db.query.checkins.findFirst.mockResolvedValue({
-        id: 'checkin-1',
-        userId: existingUser.id,
-      });
+      db.query.checkins.findFirst.mockResolvedValue(activeSession());
       stubSelectWhere([
-        { userId: 'user-1', checkedInAt: new Date() },
-        { userId: 'user-2', checkedInAt: new Date() },
+        { checkInId: sessionToken, userId: 'user-1', checkedInAt: new Date() },
+        {
+          checkInId: 'other-checkin',
+          userId: 'user-2',
+          checkedInAt: new Date(),
+        },
       ]);
       const users = [
         existingUser,
         { ...existingUser, id: 'user-2', name: 'Bob' },
       ];
       db.query.users.findMany.mockResolvedValue(users);
+      const music = {
+        title: 'Song',
+        artist: 'Artist',
+        source: 'Spotify',
+        isPlaying: true as const,
+        updatedAt: '2026-10-05T12:00:00Z',
+      };
+      musicSharing.getPresence
+        .mockReturnValueOnce(music)
+        .mockReturnValueOnce(null);
 
       // act
-      const result = await service.fetchCheckedUsersInMyGym('gym-1', 'user-1');
+      const result = await service.fetchCheckedUsersInMyGym(
+        'gym-1',
+        'user-1',
+        authorization
+      );
 
       // assert
       expect(db.query.checkins.findFirst).toHaveBeenCalled();
       expect(result).toHaveLength(users.length);
       expect(result[0]).toMatchObject(users[0]);
       expect(result[0].checkedInAt).toBeInstanceOf(Date);
+      expect(result[0].music).toEqual(music);
+      expect(
+        Object.keys(result[0]).some((key) => key.startsWith('currentSong'))
+      ).toBe(false);
+      expect(result[1].music).toBeNull();
+      expect(musicSharing.getPresence).toHaveBeenCalledWith(
+        existingUser.id,
+        sessionToken
+      );
     });
   });
 
@@ -308,21 +356,23 @@ describe('GymsService', () => {
   describe('checkOut', () => {
     it('should set the active check-in to inactive', async () => {
       // arrange
-      db.query.checkins.findFirst.mockResolvedValue({
-        id: 'checkin-1',
-        userId: existingUser.id,
-      });
+      db.query.checkins.findFirst.mockResolvedValue(activeSession());
       const set = jest.fn().mockReturnValue({
         where: jest.fn().mockResolvedValue(undefined),
       });
       db.update.mockReturnValue({ set });
 
       // act
-      await service.checkOut(existingUser.id);
+      await service.checkOut(existingUser.id, authorization);
 
       // assert
       expect(db.update).toHaveBeenCalledWith(schema.checkins);
       expect(set).toHaveBeenCalledWith({ isActive: false });
+      expect(musicSharing.expireCheckIn).toHaveBeenCalledWith(
+        existingUser.id,
+        sessionToken,
+        expect.any(Number)
+      );
     });
 
     it('should throw when the user has no active check-in', async () => {
@@ -330,21 +380,24 @@ describe('GymsService', () => {
       db.query.checkins.findFirst.mockResolvedValue(undefined);
 
       // act & assert
-      await expect(service.checkOut(existingUser.id)).rejects.toThrow(
-        BadRequestException
-      );
+      await expect(
+        service.checkOut(existingUser.id, authorization)
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('getActiveCheckIn', () => {
     it('returns the active gym and its check-in time', async () => {
-      const createdAt = new Date('2026-09-22T00:00:00Z');
+      const createdAt = new Date();
       db.query.checkins.findFirst.mockResolvedValue({
+        ...activeSession(),
         externalPlaceId: 'place-1',
         createdAt,
       });
 
-      await expect(service.getActiveCheckIn(existingUser.id)).resolves.toEqual({
+      await expect(
+        service.getActiveCheckIn(existingUser.id, authorization)
+      ).resolves.toEqual({
         gymId: 'place-1',
         checkedInAt: createdAt,
       });
@@ -353,9 +406,9 @@ describe('GymsService', () => {
     it('rejects when the user is not checked in', async () => {
       db.query.checkins.findFirst.mockResolvedValue(undefined);
 
-      await expect(service.getActiveCheckIn(existingUser.id)).rejects.toThrow(
-        NotFoundException
-      );
+      await expect(
+        service.getActiveCheckIn(existingUser.id, authorization)
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -365,7 +418,9 @@ describe('GymsService', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       setMock = jest.fn().mockReturnValue({
-        where: jest.fn().mockResolvedValue(undefined),
+        where: jest
+          .fn()
+          .mockReturnValue({ returning: jest.fn().mockResolvedValue([]) }),
       });
       db.update.mockReturnValue({ set: setMock });
     });
@@ -401,7 +456,9 @@ describe('GymsService', () => {
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       setMock.mockReturnValue({
-        where: jest.fn().mockRejectedValue(new Error('db unavailable')),
+        where: jest.fn().mockReturnValue({
+          returning: jest.fn().mockRejectedValue(new Error('db unavailable')),
+        }),
       });
 
       // act

@@ -22,6 +22,13 @@
       "when": 1785802359322,
       "tag": "0002_skinny_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791487087070,
+      "tag": "0003_remove_legacy_music_fields",
+      "breakpoints": true
     }
   ]
 }

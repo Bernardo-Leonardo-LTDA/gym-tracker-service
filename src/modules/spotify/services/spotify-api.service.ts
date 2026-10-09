@@ -1,7 +1,9 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import axios from 'axios';
-import { SpotifyTrack } from '../interfaces/spotify-playback.interface';
-import type { SpotifyCurrentlyPlaying } from '../interfaces/spotify-api.interface';
+import type {
+  SpotifyCurrentlyPlaying,
+  SpotifyTrack,
+} from '../interfaces/spotify-api.interface';
 
 @Injectable()
 export class SpotifyApiService {
@@ -10,6 +12,7 @@ export class SpotifyApiService {
       const response = await axios.get<SpotifyCurrentlyPlaying>(
         'https://api.spotify.com/v1/me/player/currently-playing',
         {
+          timeout: 10_000,
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
@@ -28,8 +31,6 @@ export class SpotifyApiService {
         isPlaying: data.is_playing,
         trackName: data.item?.name,
         artist: data.item?.artists?.map((artist) => artist.name).join(', '),
-        progressMs: data.progress_ms,
-        durationMs: data.item?.duration_ms,
       };
     } catch (error) {
       const status =
