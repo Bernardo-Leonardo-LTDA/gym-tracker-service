@@ -121,17 +121,30 @@ describe('MusicSharingService', () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it('publishes refreshes only when the shared track changes', async () => {
+  it('publishes refreshes only on track changes or before a track goes stale', async () => {
     provider.read.mockResolvedValue({ title: 'Song', artist: 'Artist' });
     await service.connect('user-1', 'spotify', 'secret-token', session());
     const changes = jest.fn();
     service.changes.subscribe(changes);
-    await jest.advanceTimersByTimeAsync(60_000);
+    await jest.advanceTimersByTimeAsync(30_000);
     expect(changes).not.toHaveBeenCalled();
-    expect(service.getStatus('user-1').state).toBe('playing');
-    provider.read.mockResolvedValue({ title: 'Next', artist: 'Artist' });
     await jest.advanceTimersByTimeAsync(30_000);
     expect(changes).toHaveBeenCalledTimes(1);
+    expect(service.getPresence('user-1')?.updatedAt).toBe(
+      new Date().toISOString()
+    );
+    provider.read.mockResolvedValue({ title: 'Next', artist: 'Artist' });
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(changes).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not republish idle playback', async () => {
+    provider.read.mockResolvedValue(null);
+    await service.connect('user-1', 'spotify', 'secret-token', session());
+    const changes = jest.fn();
+    service.changes.subscribe(changes);
+    await jest.advanceTimersByTimeAsync(120_000);
+    expect(changes).not.toHaveBeenCalled();
   });
 
   it('does not revive a disconnected track after an in-flight refresh', async () => {

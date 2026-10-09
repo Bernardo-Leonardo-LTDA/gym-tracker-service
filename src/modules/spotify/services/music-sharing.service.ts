@@ -16,6 +16,7 @@ import { SpotifyMusicProvider } from './spotify-music.provider';
 import { Subject } from 'rxjs';
 
 const MAX_TRACK_AGE_MS = 90_000;
+const TRACK_REPUBLISH_MS = 60_000;
 type MusicFailure = 'unavailable' | 'permission-denied' | 'reconnect-required';
 export interface MusicCheckInSession {
   checkInId: string;
@@ -263,13 +264,17 @@ export class MusicSharingService implements OnModuleInit, OnModuleDestroy {
       )
         return;
       const now = Date.now();
+      const previous = connection.music;
       const changed =
         connection.failure !== null ||
-        connection.music?.title !== playback?.title ||
-        connection.music?.artist !== playback?.artist;
+        previous?.title !== playback?.title ||
+        previous?.artist !== playback?.artist ||
+        // Clients drop tracks older than MAX_TRACK_AGE_MS, so re-publish a
+        // still-playing track before its updatedAt gets that old.
+        (previous !== null &&
+          now - Date.parse(previous.updatedAt) >= TRACK_REPUBLISH_MS);
       connection.checkedAt = now;
       connection.failure = null;
-      // An unchanged track needs no broadcast; viewers already have it.
       if (!changed) return;
       connection.music = playback
         ? this.asTrack(connection.provider, playback, now)
